@@ -1,0 +1,599 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"><title>Momentum Lab V3.3.3 - Multi-Universe Research Lab</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+:root{--bg:#f3f5f7;--panel:#fff;--ink:#17202a;--muted:#66717e;--line:#dfe4e9;--blue:#1769d2;--green:#0a7c49;--amber:#a66300;--red:#b42318}
+*{box-sizing:border-box}body{margin:0;font-family:Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#111827;color:#fff;padding:18px 26px}header h1{margin:0;font-size:22px}header div{font-size:12px;color:#b9c3d0;margin-top:3px}
+nav{display:flex;gap:8px;padding:12px 24px 0}nav button{border:0;border-radius:8px 8px 0 0;padding:10px 16px;cursor:pointer;background:#e4e9ee}nav button.active{background:#fff;font-weight:700}
+main{padding:0 24px 32px}.page{display:none;background:#fff;padding:20px;border-radius:0 10px 10px 10px;min-height:600px}.page.active{display:block}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.card{border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px}.card h3{margin:0 0 12px;font-size:16px}
+label{display:block;font-size:12px;color:var(--muted);margin:8px 0 5px}.row{display:flex;gap:8px;align-items:end}.row>div{flex:1}
+input,select{width:100%;padding:9px;border:1px solid #cbd3da;border-radius:7px;background:#fff}
+button.primary,button.secondary,button.good{border:0;border-radius:8px;padding:10px 14px;cursor:pointer;font-weight:650}
+button.primary{background:var(--blue);color:white}.secondary{background:#edf1f5;color:#18212b;border:1px solid #d6dde4!important}.good{background:var(--green);color:#fff}
+.small{font-size:12px;color:var(--muted);line-height:1.5}.notice{background:#eef6ff;border:1px solid #cfe2ff;padding:12px;border-radius:8px;font-size:13px}
+.statusgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.status{border:1px solid var(--line);border-radius:9px;padding:12px}.status .name{font-weight:700;font-size:13px}.ok{color:var(--green)}.warn{color:var(--amber)}.bad{color:var(--red)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.metric{border:1px solid var(--line);border-radius:8px;padding:12px}.metric .v{font-size:20px;font-weight:700}
+img.chart{width:100%;border:1px solid var(--line);border-radius:8px;margin-top:8px}table{border-collapse:collapse;width:100%;font-size:12px}th,td{border:1px solid #e2e6ea;padding:6px;text-align:right}th:first-child,td:first-child{text-align:left}
+#busy{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:99;align-items:center;justify-content:center}#busy div{background:white;border-radius:10px;padding:20px 26px;font-weight:700}
+.trendbox{border:1px solid var(--line);border-radius:8px;padding:10px}.trendbox canvas{width:100%;height:120px}.trendhead{display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px}
+.gridchecks{display:flex;flex-wrap:wrap;gap:8px 16px;margin-top:5px}.gridchecks label{margin:0;color:var(--ink)}
+.matrixwrap{overflow:auto;margin-top:10px}.matrix td{text-align:center;min-width:84px}.matrix th{text-align:center}.matrix th:first-child,.matrix td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:1}
+.gridmeta{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px}.gridmeta span{font-size:12px;color:var(--muted)}
+.robustwrap{overflow:auto;margin-top:10px}.robust{min-width:1180px}.robust th,.robust td{text-align:center;white-space:nowrap}.robust th:first-child,.robust td:first-child{text-align:left;position:sticky;left:0;background:#fff;z-index:2}.robust tr:hover td{outline:1px solid #dbe8f8}.pill{display:inline-block;padding:2px 7px;border-radius:999px;font-weight:700;font-size:11px}.pill.goodp{background:#e7f6ee;color:#0a7c49}.pill.midp{background:#fff4db;color:#8a5a00}.pill.badp{background:#fdeceb;color:#a61b12}.sectionlabel{font-weight:700;margin-top:14px;margin-bottom:4px}.hintbox{background:#fafcff;border:1px solid #dce8f7;border-radius:8px;padding:10px 12px;margin-top:10px;font-size:12px;color:#4f5f70}
+.gridlegend{display:flex;flex-wrap:wrap;gap:12px 24px;padding:12px 0;color:#526171;font-size:12px;line-height:1.6}.returnscale{display:inline-block;vertical-align:middle;width:120px;height:10px;border:1px solid #dfe4e9;border-radius:3px;background:linear-gradient(90deg,#ecc3bd,#f8fafc,#b9dfcf)}.pill.unknownp{background:#edf1f5;color:#526171}.qualitybadge{display:inline-block;min-width:58px;padding:4px 8px;border-radius:6px;font-weight:700}.scoreguide{margin:0 0 12px;color:#526171;font-size:12px;line-height:1.6}.scoreguide summary{cursor:pointer;font-weight:600}.scoreguide p{max-width:960px;margin:6px 0}
+@media(max-width:900px){.grid2,.grid3,.statusgrid,.metrics{grid-template-columns:1fr}}
+
+button.danger{background:#b42318;color:white}
+.jobpanel{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:12px;background:#fafafa}
+.jobhead{display:flex;justify-content:space-between;margin-bottom:8px}
+.progress{height:14px;background:#e7e7e7;border-radius:999px;overflow:hidden;margin-bottom:8px}
+.progressbar{height:100%;width:0%;background:#1769d2;transition:width .25s}
+</style>
+</head>
+<body>
+<header><h1>Momentum Lab V3.3.3 - Multi-Universe</h1><div>Data Manager + portable local research workbench</div></header>
+<nav>
+<button class="tab active" data-page="dashboard">Dashboard</button>
+<button class="tab" data-page="manager">Data Manager</button>
+<button class="tab" data-page="research">Research Lab</button>
+<button class="tab" data-page="settings">Settings</button>
+</nav>
+<main>
+<section id="dashboard" class="page active">
+<div class="notice"><b>V3.3.2:</b> Strategy Grid redesigned around cross-year consistency. The primary view now compares each MOM/rebalance rule across calendar years, with positive-year count, average year, worst year, full-period return, Sharpe and drawdown. The parameter heatmap remains as a secondary sensitivity view.</div>
+<div class="card" style="margin-top:14px"><h3>Data Status</h3><div id="statusGrid" class="statusgrid"></div><button class="secondary" style="margin-top:12px" onclick="loadStatus()">Refresh Status</button></div>
+<div class="grid2">
+<div class="card"><h3>Research Definition</h3><div class="small">MOM(N) = N-observation adjusted-price return / [N-observation daily-return standard deviation x sqrt(N)]. Return and volatility windows are locked together.</div></div>
+<div class="card"><h3>Execution Layers</h3><div class="small">Research Mode uses T+1 adjusted close. V2 also downloads price-limit data so the next phase can enforce limit-up/limit-down and suspension execution rules.</div></div>
+</div>
+</section>
+
+<section id="manager" class="page">
+<div class="card wide" style="margin-bottom:14px"><h3>Dataset to Manage</h3>
+<div class="row"><div><select id="dataUniverse" onchange="changeDataUniverse()">
+<option value="CSI300">CSI 300</option>
+<option value="CHINEXT_TOP100">ChiNext Top 100</option>
+<option value="STAR_TOP100">STAR Top 100</option>
+<option value="ETF_250M">Equity ETF ≥ RMB 250M</option>
+</select></div>
+<div id="dataUniverseMsg" class="small">Choose one dataset. Build/Rebuild and Incremental Update apply only to this selection.</div></div>
+</div>
+<div class="grid2">
+<div class="card"><h3>A. Locate Existing Local Data</h3>
+<div id="fileFields"></div>
+<button class="good" style="margin-top:12px" onclick="saveFiles()">Save File Locations</button>
+<button class="secondary" style="margin-top:12px" onclick="validateFiles()">Validate Research Files</button>
+<div id="validateMsg" class="small" style="margin-top:10px"></div>
+</div>
+<div class="card"><h3 id="buildTitle">B. Build CSI 300 Data From Ground Up</h3>
+<div class="row"><div><label>Start date</label><input id="buildStart" type="date" value="2021-01-01"></div><div><label>End date</label><input id="buildEnd" type="date"></div></div>
+<label><input id="includeLimits" type="checkbox" checked style="width:auto"> Download actual daily price limits (stk_limit)</label>
+<div class="row" style="margin-top:12px">
+<button class="primary" id="buildBtn" onclick="fullBuild()">BUILD / REBUILD DATASET</button>
+<button class="danger" id="cancelBtn" onclick="cancelJob()" disabled>CANCEL / INTERRUPT</button>
+<button class="secondary" id="resumeBtn" onclick="resumeJob()" disabled>RESUME</button>
+<button class="secondary" id="resetJobBtn" onclick="resetJob()">RESET STALE JOB</button>
+</div>
+<div id="buildOrder" class="small" style="margin-top:10px">Order: trading calendar → CSI300 weights → member-stock daily prices → adjustment factors → price limits → adjusted prices.</div>
+<div class="notice" style="margin-top:10px"><b>API protection:</b> V3.1 runs data downloads in the background, throttles Tushare requests, checkpoints progress, and supports safe cancel/resume.</div>
+<div id="jobPanel" class="jobpanel">
+  <div class="jobhead"><b id="jobStatus">IDLE</b><span id="jobElapsed">00:00</span></div>
+  <div class="progress"><div id="jobBar" class="progressbar"></div></div>
+  <div id="jobStage" class="small">No active data job.</div>
+  <div id="jobCounters" class="small"></div>
+  <div id="jobApi" class="small"></div>
+</div>
+<div id="buildMsg" class="small" style="margin-top:10px"></div>
+</div>
+</div>
+<div class="card"><h3>C. Incremental Update</h3>
+<div class="row"><div><label>Update through date</label><input id="refreshEnd" type="date"></div><button class="primary" id="updateBtn" onclick="refreshData()">UPDATE DATA</button><button class="danger" id="updateCancelBtn" onclick="cancelJob()">CANCEL / INTERRUPT</button></div>
+<div class="small" style="margin-top:8px"><span id="refreshHelp">V3.1 inspects only the selected dataset, requests the missing period, and refreshes membership/eligibility with overlap.</span></div>
+<div id="refreshMsg" class="small" style="margin-top:10px"></div>
+</div>
+</section>
+
+<section id="research" class="page"><div class="card wide"><h3>Research Universe</h3><div class="row"><div><select id="researchUniverse" onchange="changeUniverse()"><option value="CSI300">CSI 300</option><option value="CHINEXT_TOP100">ChiNext Top 100</option><option value="STAR_TOP100">STAR Top 100</option><option value="ETF_250M">Equity ETF ≥ RMB 250M</option></select></div><div id="universeMsg" class="small">Independent datasets; no cross-universe ranking.</div></div></div>
+<div class="grid3">
+<div class="card"><h3>1. Momentum</h3>
+<label>Primary / Backtest span</label>
+<select id="lookback"><option>10</option><option selected>20</option><option>40</option><option>60</option><option>120</option></select>
+<label style="margin-top:10px">MOM Lookbacks to Compare</label>
+<div class="checkrow">
+<label><input class="spanChk" type="checkbox" value="10" checked> MOM10</label>
+<label><input class="spanChk" type="checkbox" value="20" checked> MOM20</label>
+<label><input class="spanChk" type="checkbox" value="40" checked> MOM40</label>
+<label><input class="spanChk" type="checkbox" value="60" checked> MOM60</label>
+<label><input class="spanChk" type="checkbox" value="120"> MOM120</label>
+</div>
+<div class="small">Primary span drives the backtest. Checked lookbacks drive the comparison heatmap only; they are not blended into the strategy.</div>
+</div>
+<div class="card"><h3>2. Selection</h3><label>Portfolio</label><select id="selection"><option>Top 5</option><option selected>Top 10</option><option>Top 20</option><option>Top 30</option><option>Top 50</option><option>Q5</option><option>Q4</option><option>Q3</option><option>Q2</option><option>Q1</option></select></div>
+<div class="card"><h3>3. Rebalance</h3><label>Every N trading days</label><select id="rebalance"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>40</option></select><label>Trading cost (bps)</label><input id="cost" type="number" value="0"></div>
+</div>
+<div class="card"><div class="row"><div><label>Start optional</label><input id="rStart" type="date"></div><div><label>End optional</label><input id="rEnd" type="date"></div><button class="primary" onclick="runResearch()">RUN FULL RESEARCH</button></div></div>
+
+<div class="card">
+<h3>4. Strategy Grid / Robustness Test</h3>
+<div class="small">Automatically compares the same portfolio rule across calendar years, MOM lookbacks and rebalance periods. This is for robustness testing — not automatic parameter optimization.</div>
+<div class="grid3" style="margin-top:10px">
+  <div><label>MOM lookbacks</label><div class="gridchecks">
+    <label><input class="gridMom" type="checkbox" value="10" checked style="width:auto"> 10</label>
+    <label><input class="gridMom" type="checkbox" value="20" checked style="width:auto"> 20</label>
+    <label><input class="gridMom" type="checkbox" value="40" checked style="width:auto"> 40</label>
+    <label><input class="gridMom" type="checkbox" value="60" checked style="width:auto"> 60</label>
+    <label><input class="gridMom" type="checkbox" value="120" checked style="width:auto"> 120</label>
+  </div></div>
+  <div><label>Rebalance every N trading days</label><div class="gridchecks">
+    <label><input class="gridRb" type="checkbox" value="5" checked style="width:auto"> 5D</label>
+    <label><input class="gridRb" type="checkbox" value="10" checked style="width:auto"> 10D</label>
+    <label><input class="gridRb" type="checkbox" value="20" checked style="width:auto"> 20D</label>
+    <label><input class="gridRb" type="checkbox" value="40" checked style="width:auto"> 40D</label>
+    <label><input class="gridRb" type="checkbox" value="60" checked style="width:auto"> 60D</label>
+  </div></div>
+  <div><label>Selection rules</label><div class="gridchecks">
+    <label><input class="gridSel" type="checkbox" value="Top 5" style="width:auto"> Top5</label>
+    <label><input class="gridSel" type="checkbox" value="Top 10" checked style="width:auto"> Top10</label>
+    <label><input class="gridSel" type="checkbox" value="Top 20" style="width:auto"> Top20</label>
+    <label><input class="gridSel" type="checkbox" value="Q5" style="width:auto"> Q5</label>
+    <label><input class="gridSel" type="checkbox" value="Q4" style="width:auto"> Q4</label>
+    <label><input class="gridSel" type="checkbox" value="Q3" style="width:auto"> Q3</label>
+    <label><input class="gridSel" type="checkbox" value="Q2" style="width:auto"> Q2</label>
+    <label><input class="gridSel" type="checkbox" value="Q1" style="width:auto"> Q1</label>
+  </div></div>
+  <div><label>Calendar years (optional)</label><input id="gridYears" placeholder="blank = all years, or 2022,2023,2024"><label><input id="gridFull" type="checkbox" checked style="width:auto"> Include Full Period</label></div>
+</div>
+<div class="row" style="margin-top:10px">
+  <div><label>Heatmap metric (primary table always shows annual returns)</label><select id="gridMetric" onchange="renderStrategyGrid()"><option value="total_return">Total Return</option><option value="annualized_return">Annualized Return</option><option value="sharpe_rf0">CAGR / Ann. Vol (rf=0)</option><option value="max_drawdown">Max Drawdown</option><option value="annualized_volatility">Annualized Volatility</option></select></div>
+  <div><label>Heatmap portfolio</label><select id="gridSelection" onchange="renderStrategyGrid()"><option>Run grid first</option></select></div>
+  <div><label>Display period</label><select id="gridPeriod" onchange="renderStrategyGrid()"><option>Run grid first</option></select></div>
+  <button class="primary" onclick="runStrategyGrid()">RUN STRATEGY GRID</button>
+</div>
+<div id="gridOut" style="display:none">
+  <div id="gridMeta" class="gridmeta"></div>
+  <div class="sectionlabel">A. Cross-Year Strategy Robustness — primary view</div>
+  <div class="small">Each row is one fixed strategy. Read across the years to see whether it works consistently or only in one lucky period.</div>
+  <div id="gridSummary" class="robustwrap"></div>
+  <div class="hintbox"><b>How to read this:</b> prefer broad consistency over one spectacular cell. A strategy with more positive years, a tolerable worst year, reasonable full-period Sharpe and acceptable drawdown is more credible than a strategy that wins one year and fails nearby years/parameters.</div>
+  <div class="sectionlabel">B. MOM × Rebalance Sensitivity — secondary view</div>
+  <div class="small">Use this heatmap to check whether neighboring parameter combinations behave similarly. An isolated green cell surrounded by red is a warning sign for overfitting.</div>
+  <div id="gridMatrix" class="matrixwrap"></div>
+  <div class="small" style="margin-top:8px">Saved CSV: <span id="gridSaved"></span></div>
+</div>
+</div>
+
+<div id="researchOut" style="display:none"><div class="card"><div id="runIdentity" style="font-weight:700"></div></div>
+<div class="metrics"><div class="metric"><div class="small">Total Return</div><div id="m1" class="v"></div></div><div class="metric"><div class="small">Annualized Return</div><div id="m2" class="v"></div></div><div class="metric"><div class="small">Annualized Volatility</div><div id="m5" class="v"></div></div><div class="metric"><div class="small">CAGR / Ann. Vol (rf=0)</div><div id="m3" class="v"></div></div><div class="metric"><div class="small">Max Drawdown</div><div id="m4" class="v"></div></div></div>
+<div class="card" style="margin-top:14px"><div id="coverage" class="small"></div></div>
+<div class="card"><h3>Momentum Lookback × Forward Return</h3><div class="small">Rows are the checked MOM lookbacks. Columns are future trading-day returns. Each cell is the average forward return of the selected portfolio in this universe.</div><img id="lookbackHeat" class="chart"><div id="lookbackTable" style="margin-top:10px"></div></div>
+<div class="grid2"><div class="card"><h3>Primary MOM Rank / Signal Decay</h3><div class="small">Uses only the Primary / Backtest span and checks whether stronger ranks actually separate from weaker ranks.</div><img id="heat" class="chart"></div><div class="card"><h3>Equity Curve</h3><img id="eq" class="chart"></div></div>
+<div class="card"><h3>Drawdown</h3><img id="dd" class="chart"></div>
+<div class="card"><h3>Primary MOM Signal Decay Table</h3><div id="decay"></div></div>
+<div class="card"><h3>Latest Top 20 + Multi-Span Momentum Monitor</h3><div id="top20date" class="small"></div><div id="top20table"></div></div>
+<div class="card"><h3>Past 10 Trading-Observation Price Trends</h3><div id="trendCharts" class="grid2"></div></div>
+<div class="card"><h3>Saved Results</h3><div id="saved" class="small"></div></div>
+</div>
+</section>
+
+<section id="settings" class="page">
+<div class="grid2">
+<div class="card"><h3>Storage</h3><label>Data folder</label><div class="row"><div><input id="data_folder"></div><button class="secondary" onclick="browseFolder('data_folder')">Browse</button></div><label>Results folder</label><div class="row"><div><input id="results_folder"></div><button class="secondary" onclick="browseFolder('results_folder')">Browse</button></div></div>
+<div class="card"><h3>Tushare</h3><label>Token</label><input id="tushare_token" type="password"><label>Proxy URL</label><input id="proxy_url">
+<label>Safe API speed (requests/minute)</label><input id="api_requests_per_minute" type="number" min="30" max="390" value="240">
+<div class="small">Recommended: 240/min. Your current proxy message says the allowance is 400/min, so V2.3 deliberately stays well below it.</div>
+<label>Cooldown after frequency-limit error (seconds)</label><input id="api_cooldown_seconds" type="number" min="60" value="370">
+<button class="good" style="margin-top:12px" onclick="saveSettings()">Save Settings</button><button class="secondary" style="margin-top:12px" onclick="testApi()">Test Connection</button><div id="apiMsg" class="small" style="margin-top:8px"></div></div>
+</div>
+</section>
+</main>
+<div id="busy"><div id="busyText">Working...</div></div>
+<script>
+const $=x=>document.getElementById(x);
+const fileDefs=[
+ ['raw_price_csv','Raw Prices'],['adjusted_price_csv','Adjusted Prices'],['weights_csv','Membership / Eligibility'],
+ ['adj_factor_csv','Adjustment Factors'],['trade_calendar_csv','Trading Calendar'],['price_limits_csv','Price Limits']
+];
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
+function busy(v,t='Working...'){$('busyText').textContent=t;$('busy').style.display=v?'flex':'none'}
+async function api(url,body=null){const o=body===null?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};const r=await fetch(url,o);const j=await r.json();if(!r.ok||j.ok===false)throw new Error(j.error||((j.errors||[]).join('\n'))||'Request failed');return j}
+function pct(v){return v==null?'—':(v*100).toFixed(2)+'%'}
+function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function renderFileFields(){
+ $('fileFields').innerHTML=fileDefs.map(([id,name])=>`
+ <label>${name}</label>
+ <div class="row">
+   <div><input id="${id}"></div>
+   <button class="secondary" onclick="browseFile('${id}','${name}')">Browse Windows</button>
+   <button class="secondary" onclick="document.getElementById('upload_${id}').click()">Import CSV</button>
+   <input id="upload_${id}" type="file" accept=".csv,text/csv" style="display:none" onchange="importCsv('${id}',this)">
+ </div>`).join('');
+}
+async function loadConfig(){const c=await api('/api/config');Object.keys(c).forEach(k=>{if($(k))$(k).value=c[k]??''});if($('dataUniverse'))$('dataUniverse').value=c.active_universe||'CSI300';if($('researchUniverse'))$('researchUniverse').value=c.active_universe||'CSI300';updateUniverseLabels(c.active_universe||'CSI300');loadStatus()}
+async function saveSettings(){const c={};['data_folder','results_folder','tushare_token','proxy_url','api_requests_per_minute','api_cooldown_seconds'].forEach(k=>c[k]=$(k).value);await api('/api/config',c);$('apiMsg').innerHTML='<span class="ok">Saved.</span>'}
+async function saveFiles(){const c={};fileDefs.forEach(([id])=>c[id]=$(id).value);await api('/api/config',c);$('validateMsg').innerHTML='<span class="ok">File locations saved.</span>';loadStatus()}
+async function browseFile(id,title){
+ try{
+   const j=await api('/api/browse-file',{initial:$(id).value,title:'Select '+title+' CSV'});
+   if(j.path){$(id).value=j.path;$('validateMsg').innerHTML='<span class="ok">Selected: '+j.path+'</span>'}
+   else{$('validateMsg').innerHTML='<span class="warn">No file selected. You can use Import CSV instead.</span>'}
+ }catch(e){
+   $('validateMsg').innerHTML='<span class="bad">'+e.message+'</span><br><span class="small">Use Import CSV as the fallback.</span>'
+ }
+}
+async function importCsv(id,input){
+ if(!input.files || !input.files.length)return;
+ const f=input.files[0];
+ busy(true,'Importing '+f.name+'...');
+ try{
+   const r=await fetch('/api/import-csv?field='+encodeURIComponent(id)+'&filename='+encodeURIComponent(f.name),
+     {method:'POST',headers:{'Content-Type':'application/octet-stream'},body:f});
+   const j=await r.json();
+   if(!r.ok||j.ok===false)throw new Error(j.error||'Import failed');
+   $(id).value=j.path;
+   $('validateMsg').innerHTML='<span class="ok">Imported to Momentum Lab: '+j.path+'</span>';
+   await loadConfig();
+ }catch(e){
+   $('validateMsg').innerHTML='<span class="bad">'+e.message+'</span>'
+ }finally{busy(false);input.value=''}
+}
+async function browseFolder(id){const j=await api('/api/browse-folder',{initial:$(id).value});if(j.path)$(id).value=j.path}
+async function testApi(){busy(true,'Testing Tushare...');try{await saveSettings();const j=await api('/api/test-tushare',{});$('apiMsg').innerHTML='<span class="ok">'+j.message+' Rows: '+j.rows+'</span>'}catch(e){$('apiMsg').innerHTML='<span class="bad">'+e.message+'</span>'}finally{busy(false)}}
+async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('')}
+async function validateFiles(){await saveFiles();const j=await api('/api/validate',{});$('validateMsg').innerHTML=j.ok?'<span class="ok">✓ Research files are ready.</span>':'<span class="bad">'+j.errors.join('<br>')+'</span>'}
+async function fullBuild(){
+ try{
+   await saveSettings();
+   const u=$('dataUniverse').value;
+   const j=await api('/api/full-build',{universe:u,start_date:$('buildStart').value,end_date:$('buildEnd').value,include_limits:$('includeLimits').checked});
+   $('buildMsg').innerHTML='<span class="ok">Background build started for '+universeLabel(u)+'.</span>';
+   renderJob(j.job);
+ }catch(e){$('buildMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+}
+async function refreshData(){
+ try{
+   await saveSettings();
+   const u=$('dataUniverse').value;
+   const j=await api('/api/refresh',{universe:u,end_date:$('refreshEnd').value});
+   $('refreshMsg').innerHTML='<span class="ok">Background update started for '+universeLabel(u)+'.</span>';
+   renderJob(j.job);
+ }catch(e){$('refreshMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+}
+async function cancelJob(){
+ try{
+   const j=await api('/api/job-cancel',{});
+   renderJob(j.job);
+ }catch(e){$('buildMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+}
+async function resumeJob(){
+ try{
+   const j=await api('/api/job-resume',{});
+   $('buildMsg').innerHTML='<span class="ok">Resuming from saved checkpoints.</span>';
+   renderJob(j.job);
+ }catch(e){$('buildMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+}
+function fmtTime(sec){
+ sec=Math.max(0,Math.floor(sec||0));const m=Math.floor(sec/60),s=sec%60;
+ return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')
+}
+let lastCompletedJob=null;
+function renderJob(j){
+ if(!j)return;
+ const active=['running','cancelling'].includes(j.status);
+ const setDis=(id,v)=>{const e=$(id);if(e)e.disabled=v};
+ const setTxt=(id,v)=>{const e=$(id);if(e)e.textContent=v};
+ const setHtml=(id,v)=>{const e=$(id);if(e)e.innerHTML=v};
+
+ setDis('buildBtn',active);
+ setDis('updateBtn',active);
+ setDis('cancelBtn',!active);
+ setDis('updateCancelBtn',!active);
+ setDis('resumeBtn',active || !j.can_resume);
+
+ setTxt('jobStatus',(j.status||'idle').toUpperCase()+(j.kind?' · '+j.kind.replace('_',' '):''));
+ setTxt('jobElapsed',fmtTime(j.elapsed_seconds));
+
+ const pctg=j.total?Math.min(100,Math.round((j.current/j.total)*100)):0;
+ const bar=$('jobBar'); if(bar)bar.style.width=pctg+'%';
+
+ setHtml('jobStage','<b>Stage '+(j.stage_index||0)+' / '+(j.stage_total||0)+': '+(j.stage||'—')+'</b><br>'+(j.message||''));
+ setTxt('jobCounters',j.total?('Progress: '+Number(j.current||0).toLocaleString()+' / '+Number(j.total||0).toLocaleString()+' ('+pctg+'%)'):'');
+ setTxt('jobApi','API requests in last minute: '+(j.api_requests_last_minute||0)+(j.cooldown_remaining?(' · Cooldown: '+j.cooldown_remaining+'s'):''));
+
+ if(j.status==='completed' && lastCompletedJob!==j.started_at){
+   lastCompletedJob=j.started_at;
+   setHtml('buildMsg','<span class="ok">✓ Data job completed.</span>');
+   loadConfig();
+ }
+ if(j.status==='cancelled'){
+   setHtml('buildMsg','<span class="warn">Build cancelled. Downloaded progress/checkpoints were preserved. Click RESUME when ready.</span>');
+ }
+ if(j.status==='error'){
+   setHtml('buildMsg','<span class="bad">'+(j.last_error||j.message||'Data job failed')+'</span>');
+ }
+ if(j.status==='idle'){
+   setHtml('buildMsg','<span class="small">No active data job.</span>');
+ }
+}
+
+async function resetJob(){
+ try{
+   const j=await api('/api/job-reset',{});
+   renderJob(j.job);
+   if($('buildMsg'))$('buildMsg').innerHTML='<span class="ok">Job state reset.</span>';
+ }catch(e){
+   if($('buildMsg'))$('buildMsg').innerHTML='<span class="bad">'+e.message+'</span>';
+ }
+}
+async function pollJob(){
+ try{const x=await api('/api/job-status');renderJob(x.job)}catch(e){}
+}
+setInterval(pollJob,1000);
+function fileUrl(p){return '/file?path='+encodeURIComponent(p)+'&t='+Date.now()}
+async function runResearch(){
+ const u=$('researchUniverse').value;
+ const lb=+$('lookback').value;
+ const spans=[...document.querySelectorAll('.spanChk:checked')].map(x=>+x.value);
+ if(!spans.length){alert('Choose at least one MOM lookback to compare.');return;}
+ busy(true,'Running '+universeLabel(u)+' MOM'+lb+' research...');
+ try{
+   const j=await api('/api/run',{universe:u,lookback:lb,display_spans:spans,selection:$('selection').value,rebalance_days:+$('rebalance').value,trading_cost_bps:+$('cost').value,start_date:$('rStart').value,end_date:$('rEnd').value});
+   $('researchOut').style.display='block';
+   const r=j.run||{};
+   $('runIdentity').innerHTML='RUN: <b>'+(r.universe_label||universeLabel(u))+'</b> · <b>MOM'+(r.lookback||lb)+'</b> · <b>'+(r.selection||$('selection').value)+'</b> · Rebalance <b>'+(r.rebalance_days||+$('rebalance').value)+'D</b> · Cost <b>'+((r.trading_cost_bps??+$('cost').value))+' bps</b>';
+   $('m1').textContent=pct(j.stats.total_return);$('m2').textContent=pct(j.stats.annualized_return);$('m5').textContent=pct(j.stats.annualized_volatility);$('m3').textContent=j.stats.sharpe_rf0==null?'—':j.stats.sharpe_rf0.toFixed(2);$('m4').textContent=pct(j.stats.max_drawdown);
+   const reqRange=(j.requested_start||j.usable_start)+' → '+(j.requested_end||j.usable_end);
+   $('coverage').innerHTML='Dataset: <b>'+(r.universe_label||universeLabel(u))+'</b> · Available: <b>'+j.usable_start+' → '+j.usable_end+'</b> · Requested: <b>'+reqRange+'</b> · Backtest actually used: <b>'+j.backtest_start+' → '+j.backtest_end+'</b> · observations: <b>'+j.stats.observations+'</b> · snapshots: <b>'+j.snapshots+'</b>';
+   $('lookbackHeat').src=fileUrl(j.files.lookback_heatmap);$('heat').src=fileUrl(j.files.heatmap);$('eq').src=fileUrl(j.files.equity);$('dd').src=fileUrl(j.files.drawdown);
+   const lbgs=Object.keys(j.lookback_comparison||{});
+   if(lbgs.length){const lbcs=Object.keys(j.lookback_comparison[lbgs[0]]);let lh='<table><tr><th>Lookback</th>'+lbcs.map(c=>'<th>'+c+'</th>').join('')+'</tr>';for(const g of lbgs)lh+='<tr><td><b>'+g+'</b></td>'+lbcs.map(c=>'<td>'+(j.lookback_comparison[g][c]==null?'—':(j.lookback_comparison[g][c]*100).toFixed(2)+'%')+'</td>').join('')+'</tr>';lh+='</table>';$('lookbackTable').innerHTML=lh;}
+   const gs=Object.keys(j.decay),cs=Object.keys(j.decay[gs[0]]);let h='<table><tr><th>Group</th>'+cs.map(c=>'<th>+'+c+'</th>').join('')+'</tr>';for(const g of gs)h+='<tr><td>'+g+'</td>'+cs.map(c=>'<td>'+(j.decay[g][c]==null?'—':(j.decay[g][c]*100).toFixed(2)+'%')+'</td>').join('')+'</tr>';h+='</table>';$('decay').innerHTML=h;
+   renderTop20(j.top20);$('saved').textContent=j.files.folder;
+   labelResearchResults(j);
+ }catch(e){alert(e.message)}finally{busy(false)}
+}
+
+let strategyGridData=null;
+function gridMetricText(metric,v){
+ if(v==null||!Number.isFinite(Number(v)))return '—';
+ v=Number(v);
+ if(metric==='sharpe_rf0')return v.toFixed(2);
+ return (v*100).toFixed(2)+'%';
+}
+function gridCellStyle(metric,v,vals){
+ if(v==null||!Number.isFinite(Number(v)))return '';
+ if(metric==='max_drawdown')return drawdownStyle(v);
+ const nums=vals.filter(x=>x!=null&&Number.isFinite(Number(x))).map(Number);
+ if(!nums.length)return '';
+ if(metric==='total_return'||metric==='annualized_return')return returnStyle(v,Math.max(...nums.map(Math.abs)));
+ const min=Math.min(...nums),max=Math.max(...nums);
+ let t=(max===min)?0.5:(Number(v)-min)/(max-min);
+ if(metric==='annualized_volatility')t=1-t;
+ // soft red -> white -> green. Drawdown is less negative = better, so normal numeric ordering still works.
+ let bg;
+ if(t<0.5){const a=(0.5-t)*2;bg=`rgba(180,35,24,${0.08+0.30*a})`;}
+ else{const a=(t-0.5)*2;bg=`rgba(10,124,73,${0.08+0.30*a})`;}
+ return 'background:'+bg+';font-weight:650';
+}
+async function runStrategyGrid(){
+ const u=$('researchUniverse').value;
+ const moms=[...document.querySelectorAll('.gridMom:checked')].map(x=>+x.value);
+ const rbs=[...document.querySelectorAll('.gridRb:checked')].map(x=>+x.value);
+ const sels=[...document.querySelectorAll('.gridSel:checked')].map(x=>x.value);
+ if(!sels.length){alert('Choose at least one selection rule.');return}
+ if(!moms.length){alert('Choose at least one MOM lookback.');return}
+ if(!rbs.length){alert('Choose at least one rebalance period.');return}
+ const years=$('gridYears').value.split(',').map(x=>x.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
+ busy(true,'Running strategy robustness grid...');
+ try{
+   const j=await api('/api/strategy-grid',{universe:u,selection_rule:$('selection') ? $('selection').value : 'Top 10',trading_cost_bps:+$('cost').value,lookbacks:moms,rebalances:rbs,selections:sels,years:years,include_full:$('gridFull').checked});
+   strategyGridData=j;
+   $('gridSelection').innerHTML=j.selection_rules.map(s=>'<option>'+escapeHtml(s)+'</option>').join('');
+   $('gridPeriod').innerHTML=j.periods.map(p=>'<option>'+p+'</option>').join('');
+   if(j.periods.includes('Full Period'))$('gridPeriod').value='Full Period';
+   $('gridOut').style.display='block';
+   $('gridSaved').textContent=j.files.csv;
+   renderStrategyGrid();
+ }catch(e){alert(e.message)}finally{busy(false)}
+}
+function returnStyle(v,limit){
+ if(v==null||!Number.isFinite(Number(v)))return '';
+ const magnitude=limit>0?Math.min(Math.abs(Number(v))/limit,1):0;
+ if(Number(v)===0)return 'background:#f8fafc;color:#526171;font-weight:650';
+ const rgb=Number(v)>0?'10,124,73':'180,35,24';
+ return `background:rgba(${rgb},${0.04+0.24*magnitude});color:${Number(v)>0?'#075d38':'#8f1d15'};font-weight:650`;
+}
+function drawdownStyle(v){
+ if(v==null||!Number.isFinite(Number(v)))return '';
+ const loss=Math.abs(Number(v));
+ const rgb=loss<=0.10?'10,124,73':loss<=0.25?'166,99,0':'180,35,24';
+ const ink=loss<=0.10?'#075d38':loss<=0.25?'#805000':'#8f1d15';
+ return `background:rgba(${rgb},${0.08+0.20*Math.min(loss/0.50,1)});color:${ink};font-weight:650`;
+}
+function consistencyPill(pos,total,valid=total){
+ if(!total)return '—';
+ const r=pos/total,limited=valid<total||valid<2;
+ const label=limited?'Limited coverage':r>=2/3?'High consistency':r>=0.5?'Mixed consistency':'Low consistency';
+ const c=limited?'unknownp':r>=2/3?'goodp':r>=0.5?'midp':'badp';
+ return `<span class="pill ${c}" title="${label}; ${valid}/${total} valid years. Descriptive frequency, not statistical confidence; partial years count.">${pos}/${total} · ${limited?'Limited':r>=2/3?'High':r>=0.5?'Mixed':'Low'}</span>`;
+}
+function strategyQuality(s,total){
+ const full=s.full,finite=v=>v!=null&&Number.isFinite(Number(v));
+ if(total<2||s.returns.length!==total||!full||full.error||!finite(full.sharpe_rf0)||!finite(full.max_drawdown))return null;
+ const clamp=v=>Math.max(0,Math.min(1,v));
+ return Math.round(100*(0.50*s.positive/total+0.25*clamp(Number(full.sharpe_rf0)/2)+0.25*clamp(1-Math.abs(Number(full.max_drawdown))/0.50)));
+}
+function renderStrategyGrid(){
+ const j=strategyGridData;if(!j||!j.rows)return;
+ const period=$('gridPeriod').value,metric=$('gridMetric').value,selection=$('gridSelection').value;
+ const years=j.periods.filter(p=>/^\d{4}$/.test(p));
+ const find=(p,lb,rb,sel)=>j.rows.find(r=>r.period===p&&r.lookback===lb&&r.rebalance_days===rb&&r.selection===sel);
+ const number=v=>v!=null&&Number.isFinite(Number(v));
+ const annualValues=j.rows.filter(r=>years.includes(r.period)&&!r.error&&number(r.total_return)).map(r=>Math.abs(Number(r.total_return)));
+ const annualLimit=annualValues.length?Math.max(...annualValues):0;
+ const context=`${j.universe_label} | ${j.trading_cost_bps} bps | T+1 adjusted close | dataset ${j.dataset_start} → ${j.dataset_end}`;
+ const rowInfo=r=>r?(r.error?`FAILED: ${r.error}`:`${r.selection} | MOM${r.lookback} | ${r.rebalance_days}D | actual ${r.backtest_start} → ${r.backtest_end} | ${r.observations} observations | ${r.rebalances} rebalances`):'Missing result';
+ const cell=(r,m,annual=false)=>!r||r.error?`<td title="${escapeHtml(rowInfo(r))}">${r?.error?'FAILED':'—'}</td>`:`<td title="${escapeHtml(rowInfo(r))}" style="${annual?returnStyle(r[m],annualLimit):m==='max_drawdown'?drawdownStyle(r[m]):''}">${gridMetricText(m,r[m])}</td>`;
+ $('gridMeta').innerHTML=`<span>${escapeHtml(context)}</span><span>Portfolios: ${escapeHtml(j.selection_rules.join(', '))}</span><span>Failed combinations: ${j.failed_combinations??j.rows.filter(r=>r.error).length}</span>`+
+  (j.notes||[]).map(n=>`<div class="small">${escapeHtml(n)}</div>`).join('');
+ let strategies=[];
+ for(const sel of j.selection_rules)for(const lb of j.lookbacks)for(const rb of j.rebalances){
+  const rr=years.map(y=>find(y,lb,rb,sel));
+  const returns=rr.filter(r=>r&&!r.error&&number(r.total_return)).map(r=>r.total_return);
+  strategies.push({sel,lb,rb,rr,returns,positive:returns.filter(v=>v>0).length,
+   avg:returns.length?returns.reduce((a,b)=>a+b,0)/returns.length:null,
+   worst:returns.length?Math.min(...returns):null,best:returns.length?Math.max(...returns):null,
+   full:find('Full Period',lb,rb,sel)});
+ }
+ strategies.sort((a,b)=>{
+  // Incomplete coverage must not outrank fully evaluated strategies.
+  const complete=s=>s.returns.length===years.length;
+  if(complete(a)!==complete(b))return Number(complete(b))-Number(complete(a));
+  if(b.positive!==a.positive)return b.positive-a.positive;
+  const ratio=s=>s.full&&!s.full.error&&number(s.full.sharpe_rf0)?s.full.sharpe_rf0:-Infinity;
+  if(ratio(a)!==ratio(b))return ratio(a)>ratio(b)?-1:1;
+  return (b.avg??-Infinity)-(a.avg??-Infinity);
+ });
+ let h=`<div class="gridlegend"><span>Annual returns: −${(annualLimit*100).toFixed(2)}% <span class="returnscale" aria-hidden="true"></span> +${(annualLimit*100).toFixed(2)}% · center 0%; shared scale across all annual cells</span><span>Positive years: <b>High ≥ ⅔</b> · Mixed ≥ ½ · Low &lt; ½ · gray = limited coverage</span><span>Drawdown magnitude: green ≤ 10% · amber ≤ 25% · red &gt; 25%</span></div><details class="scoreguide"><summary>Quality score / 100 — display-only heuristic</summary><p>50% × positive / requested years + 25% × clamp(full CAGR / annualized volatility ÷ 2) + 25% × clamp(1 − |full max drawdown| ÷ 50%), multiplied by 100 and rounded. Clamp limits each component to 0–1. At least two valid years, complete requested-year coverage and full-period metrics are required; otherwise “—”. Partial years count as years. This is a descriptive comparison, not a probability, statistical confidence or investment recommendation. Scores do not change row ordering, backtests, CSVs or API data.</p></details><table class="robust"><caption>${escapeHtml(context)}<br>Independent calendar-year returns (%); hover cells for actual dates and observations. Partial years are included. Average/worst/best use successful years only.</caption><tr><th>Fixed Strategy / Portfolio</th>`+
+ years.map(y=>`<th>${y}${y===j.dataset_start.slice(0,4)||y===j.dataset_end.slice(0,4)?' (check coverage)':''}</th>`).join('')+
+ '<th>Positive / Requested Years</th><th>Valid Years</th><th>Avg Year</th><th>Worst Year</th><th>Best Year</th><th>Full Return</th><th>Full CAGR / Ann. Vol</th><th>Full Max DD</th><th title="Display-only heuristic; expand the formula above. Requires at least two valid years and full-period metrics.">Quality / 100</th></tr>';
+ for(const s of strategies){
+  h+=`<tr><td>${escapeHtml(s.sel)} | MOM${s.lb} / ${s.rb}D</td>`+s.rr.map(r=>cell(r,'total_return',true)).join('');
+  h+=`<td>${consistencyPill(s.positive,years.length,s.returns.length)}</td><td>${s.returns.length}/${years.length}</td>`;
+  h+=[s.avg,s.worst,s.best].map(v=>`<td>${gridMetricText('total_return',v)}</td>`).join('');
+  const quality=strategyQuality(s,years.length);
+  h+=cell(s.full,'total_return')+cell(s.full,'sharpe_rf0')+cell(s.full,'max_drawdown');
+  h+=quality==null?'<td title="Unavailable: requires at least two valid years, complete requested-year coverage and full-period metrics.">—</td></tr>':`<td><span class="qualitybadge" style="background:#edf3fb;color:#244c78" title="Display-only weighted consistency, CAGR/volatility and drawdown; see formula above.">${quality} / 100</span></td></tr>`;
+ }
+ $('gridSummary').innerHTML=h+'</table>';
+ const rows=j.rows.filter(r=>r.period===period&&r.selection===selection&&!r.error);
+ const vals=rows.map(r=>r[metric]);
+ const scaleLabel=metric==='total_return'||metric==='annualized_return'?'diverging scale centered at 0%: red = negative, green = positive':metric==='max_drawdown'?'risk scale: green ≤ 10%, amber ≤ 25%, red > 25% drawdown magnitude':`relative scale: green = ${metric==='annualized_volatility'?'lower':'higher'}`;
+ h=`<table class="matrix"><caption>${escapeHtml(context)}<br>${escapeHtml(selection)} | ${escapeHtml(period)} | ${escapeHtml($('gridMetric').selectedOptions[0]?.textContent)} | ${escapeHtml(scaleLabel)}; hover for actual coverage</caption><tr><th>MOM observations ↓ / Rebalance observations →</th>`+
+ j.rebalances.map(rb=>`<th>${rb}D</th>`).join('')+'</tr>';
+ for(const lb of j.lookbacks){
+  h+=`<tr><td>MOM${lb}</td>`;
+  for(const rb of j.rebalances){
+   const r=find(period,lb,rb,selection);
+   if(!r||r.error)h+=cell(r,metric);
+   else h+=`<td title="${escapeHtml(rowInfo(r))}" style="${gridCellStyle(metric,r[metric],vals)}">${gridMetricText(metric,r[metric])}</td>`;
+  }
+  h+='</tr>';
+ }
+ $('gridMatrix').innerHTML=h+'</table>';
+}
+
+function labelResearchResults(j){
+ const r=j.run;
+ const diagnostic=`${r.universe_label} | ${j.diagnostic_label} | daily cross-sectional means averaged across signal dates; missing forward observations excluded; forward horizons end within requested range.`;
+ const addCaption=(id,text,counts)=>{
+  const table=$(id).querySelector('table');if(!table)return;
+  let c=table.caption||table.createCaption();c.textContent=text;
+  if(counts)for(const row of [...table.rows].slice(1)){
+   const group=row.cells[0].textContent;
+   const values=Object.values(counts[group]||{});
+   [...row.cells].slice(1).forEach((cell,i)=>cell.title=`Valid signal dates: ${values[i]??'unavailable'}`);
+  }
+ };
+ addCaption('lookbackTable',`${diagnostic} | Portfolio ${r.selection} | checked MOM ${j.comparison_spans.join(', ')} | returns (%) — hover for sample counts`,j.comparison_counts);
+ addCaption('decay',`${diagnostic} | MOM${r.lookback} | Top10/Top20 and Q1–Q5 (Q5 strongest) | returns (%) — hover for sample counts`,j.decay_counts);
+ addCaption('top20table',`${r.universe_label} | as of ${j.top20.date} | Top20 by MOM${r.lookback} | score = N-observation return / (sample daily SD × √N); persistence and streak limited to last ${r.lookback} ranking dates; trend = last 10 available observations.`);
+ for(const [id,label] of [['lookbackHeat',`${diagnostic} | ${r.selection} | MOM ${j.comparison_spans.join(', ')}`],['heat',`${diagnostic} | MOM${r.lookback} | Top10/Top20, Q1–Q5`],['eq',`${j.portfolio_label} | equity normalized to first post-entry NAV`],['dd',`${j.portfolio_label} | drawdown from running peak (%)`]]){
+  $(id).alt=label;
+  let caption=$(id).parentElement.querySelector(`[data-chart-caption="${id}"]`);
+  if(!caption){caption=document.createElement('div');caption.className='small';caption.dataset.chartCaption=id;$(id).after(caption);}
+  caption.textContent=label;
+ }
+ $('trendCharts').querySelectorAll('.trendbox').forEach((box,i)=>{
+  const row=j.top20.rows[i];const note=document.createElement('div');note.className='small';
+  note.textContent=`${r.universe_label} | ${row.ticker} | as of ${j.top20.date} | x: last ${row.trend_prices.length} available observations; y: adjusted close (price units), not return`;box.append(note);
+ });
+ let notes=$('researchNotes');if(!notes){notes=document.createElement('div');notes.id='researchNotes';notes.className='notice';$('coverage').after(notes);}
+ notes.textContent=(j.notes||[]).join(' ');
+}
+
+function drawMiniTrend(canvas,prices){
+ const ctx=canvas.getContext('2d'),w=canvas.width=canvas.clientWidth*2,h=canvas.height=240;
+ ctx.clearRect(0,0,w,h);
+ if(!prices||prices.length<2)return;
+ const min=Math.min(...prices),max=Math.max(...prices),pad=18;
+ const range=(max-min)||1;
+ ctx.beginPath();
+ prices.forEach((p,i)=>{
+   const x=pad+i*(w-2*pad)/(prices.length-1);
+   const y=h-pad-(p-min)*(h-2*pad)/range;
+   if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);
+ });
+ ctx.lineWidth=3;ctx.strokeStyle='#1769d2';ctx.stroke();
+}
+function renderTop20(t){
+ if(!t||!t.rows){return}
+ const spans=t.spans||[];
+ $('top20date').innerHTML='Signal date: <b>'+(t.date||'—')+'</b> · Primary span: <b>MOM'+t.primary_span+'</b> · Display spans: <b>'+spans.map(s=>'MOM'+s).join(', ')+'</b>';
+ let h='<div style="overflow:auto"><table><tr>'+
+   '<th>Rank</th><th>Ticker</th><th>Primary MOM</th><th>Signal Return</th><th>Signal Vol</th>'+
+   '<th>Top20 Count</th><th>Persistence</th><th>Streak</th><th>Span Consensus</th>';
+ for(const s of spans)h+='<th>MOM'+s+' Score</th><th>MOM'+s+' Rank</th>';
+ h+='<th>10-Day Trend</th></tr>';
+
+ for(const r of t.rows){
+   const pr=x=>x==null?'—':(x*100).toFixed(2)+'%';
+   h+='<tr><td>'+r.rank+'</td><td><b>'+r.ticker+'</b></td>'+
+      '<td>'+(r.momentum_score==null?'—':r.momentum_score.toFixed(3))+'</td>'+
+      '<td>'+pr(r.signal_return)+'</td><td>'+pr(r.signal_volatility)+'</td>'+
+      '<td><span class="badge">'+r.top20_count+' / '+r.top20_window+'</span></td>'+
+      '<td>'+pr(r.persistence)+'</td>'+
+      '<td>'+r.top20_streak+'</td>'+
+      '<td><span class="'+(r.span_consensus===r.span_total?'badge goodbadge':'badge')+'">'+r.span_consensus+' / '+r.span_total+'</span></td>';
+
+   for(const s of spans){
+      const d=(r.span_data||{})[String(s)]||{};
+      h+='<td>'+(d.score==null?'—':d.score.toFixed(3))+'</td>'+
+         '<td>'+(d.rank==null?'—':(d.top20?'<b>'+d.rank+'</b>':d.rank))+'</td>';
+   }
+   h+='<td>'+pr(r.trend_10obs_return)+'</td></tr>';
+ }
+ h+='</table></div>';$('top20table').innerHTML=h;
+
+ $('trendCharts').innerHTML=t.rows.map((r,i)=>'<div class="trendbox"><div class="trendhead"><b>#'+r.rank+' '+r.ticker+'</b><span>'+((r.trend_10obs_return==null)?'—':(r.trend_10obs_return*100).toFixed(2)+'%')+'</span></div><canvas id="trend_'+i+'"></canvas><div class="small">'+r.trend_dates.join(' · ')+'</div></div>').join('');
+ t.rows.forEach((r,i)=>drawMiniTrend($('trend_'+i),r.trend_prices));
+}
+
+
+async function loadUniverses(){try{const j=await fetch('/api/universes').then(r=>r.json());if($('researchUniverse'))$('researchUniverse').value=j.active||'CSI300'}catch(e){}}
+async function changeUniverse(){try{const u=$('researchUniverse').value;const j=await api('/api/set-universe',{universe:u});$('universeMsg').innerHTML='<span class="ok">Active: '+j.label+'</span>';if($('dataUniverse'))$('dataUniverse').value=u;updateUniverseLabels(u);await loadConfig()}catch(e){$('universeMsg').innerHTML='<span class="bad">'+e.message+'</span>'}}
+
+
+function universeLabel(u){return {CSI300:'CSI 300',CHINEXT_TOP100:'ChiNext Top 100',STAR_TOP100:'STAR Top 100',ETF_250M:'Equity ETF ≥ RMB 250M'}[u]||u}
+function updateUniverseLabels(u){
+ const label=universeLabel(u);
+ if($('buildTitle'))$('buildTitle').textContent='B. Build '+label+' Data From Ground Up';
+ if($('includeLimits')){
+   $('includeLimits').disabled=(u==='ETF_250M');
+   if(u==='ETF_250M')$('includeLimits').checked=false;
+ }
+ if($('buildOrder')){
+   if(u==='CSI300')$('buildOrder').textContent='Order: trading calendar → CSI300 historical weights → member-stock prices → adjustment factors → price limits → adjusted prices.';
+   else if(u==='CHINEXT_TOP100'||u==='STAR_TOP100')$('buildOrder').textContent='Order: trading calendar → month-end point-in-time Top100 market-cap snapshots → eligible stock prices → adjustment factors → price limits → adjusted prices.';
+   else $('buildOrder').textContent='Order: trading calendar → historical ETF size snapshots (≥ RMB 250M) → eligible ETF prices → ETF adjustment factors → adjusted prices. ETF size data requires Tushare etf_share_size permission.';
+ }
+}
+async function changeDataUniverse(){
+ const u=$('dataUniverse').value;
+ try{
+   const j=await api('/api/set-universe',{universe:u});
+   $('dataUniverseMsg').innerHTML='<span class="ok">Managing: '+j.label+'</span>';
+   if($('researchUniverse'))$('researchUniverse').value=u;
+   updateUniverseLabels(u);
+   await loadConfig();
+ }catch(e){$('dataUniverseMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+}
+
+renderFileFields();
+const today=new Date().toISOString().slice(0,10);$('buildEnd').value=today;$('refreshEnd').value=today;loadConfig();pollJob();loadUniverses();
+</script>
+</body></html>

@@ -1,0 +1,29 @@
+# Local credentials and machine-specific paths
+config/settings.json
+
+# Generated/local data and research outputs
+data/*
+!data/.gitkeep
+results/*
+!results/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+
+# Packaging/build artifacts
+build/
+dist/
+*.spec
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

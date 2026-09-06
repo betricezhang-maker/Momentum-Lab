@@ -1,0 +1,12 @@
+{
+  "data_folder": "data",
+  "results_folder": "results",
+  "proxy_url": "https://fast.xiaodefa.cn",
+  "tushare_token": "",
+  "raw_price_csv": "",
+  "adj_factor_csv": "",
+  "weights_csv": "",
+  "adjusted_price_csv": "",
+  "trade_calendar_csv": "",
+  "price_limits_csv": ""
+}
