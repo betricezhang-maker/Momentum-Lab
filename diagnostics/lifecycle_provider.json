@@ -1,0 +1,122 @@
+[
+  {
+    "ticker": "563080.SH",
+    "api": "fund_basic",
+    "params": {
+      "ts_code": "563080.SH"
+    },
+    "fields": "ts_code,name,found_date,issue_date,list_date,delist_date,market",
+    "timestamp": "2026-09-21T12:28:40.884217+00:00",
+    "status": "SUCCESS",
+    "rows": [
+      {
+        "ts_code": "563080.SH",
+        "name": "易方达中证A50ETF",
+        "found_date": "20240306",
+        "issue_date": "20240219",
+        "list_date": "20240318",
+        "delist_date": "",
+        "market": "E"
+      }
+    ]
+  },
+  {
+    "ticker": "563080.SH",
+    "api": "etf_basic",
+    "params": {
+      "ts_code": "563080.SH"
+    },
+    "fields": "ts_code,csname,list_date,list_status,exchange",
+    "timestamp": "2026-09-21T12:28:47.056368+00:00",
+    "status": "SUCCESS",
+    "rows": [
+      {
+        "ts_code": "563080.SH",
+        "csname": "易方达中证A50ETF",
+        "list_date": "20240318",
+        "list_status": "L",
+        "exchange": "SH"
+      }
+    ]
+  },
+  {
+    "ticker": "589220.SH",
+    "api": "fund_basic",
+    "params": {
+      "ts_code": "589220.SH"
+    },
+    "fields": "ts_code,name,found_date,issue_date,list_date,delist_date,market",
+    "timestamp": "2026-09-21T12:28:48.262920+00:00",
+    "status": "SUCCESS",
+    "rows": [
+      {
+        "ts_code": "589220.SH",
+        "name": "国泰上证科创板200ETF",
+        "found_date": "20260116",
+        "issue_date": "20260105",
+        "list_date": "20260126",
+        "delist_date": "",
+        "market": "E"
+      }
+    ]
+  },
+  {
+    "ticker": "589220.SH",
+    "api": "etf_basic",
+    "params": {
+      "ts_code": "589220.SH"
+    },
+    "fields": "ts_code,csname,list_date,list_status,exchange",
+    "timestamp": "2026-09-21T12:28:48.433668+00:00",
+    "status": "SUCCESS",
+    "rows": [
+      {
+        "ts_code": "589220.SH",
+        "csname": "国泰上证科创板200ETF",
+        "list_date": "20260126",
+        "list_status": "L",
+        "exchange": "SH"
+      }
+    ]
+  },
+  {
+    "ticker": "520960.SH",
+    "api": "fund_basic",
+    "params": {
+      "ts_code": "520960.SH"
+    },
+    "fields": "ts_code,name,found_date,issue_date,list_date,delist_date,market",
+    "timestamp": "2026-09-21T12:28:48.586479+00:00",
+    "status": "SUCCESS",
+    "rows": [
+      {
+        "ts_code": "520960.SH",
+        "name": "嘉实恒指港股通ETF",
+        "found_date": "20251022",
+        "issue_date": "20251009",
+        "list_date": "20251031",
+        "delist_date": "",
+        "market": "E"
+      }
+    ]
+  },
+  {
+    "ticker": "520960.SH",
+    "api": "etf_basic",
+    "params": {
+      "ts_code": "520960.SH"
+    },
+    "fields": "ts_code,csname,list_date,list_status,exchange",
+    "timestamp": "2026-09-21T12:28:48.725727+00:00",
+    "status": "SUCCESS",
+    "rows": [
+      {
+        "ts_code": "520960.SH",
+        "csname": "嘉实恒指港股通ETF",
+        "list_date": "20251031",
+        "list_status": "L",
+        "exchange": "SH"
+      }
+    ]
+  }
+]

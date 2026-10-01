@@ -1,0 +1,83 @@
+.E...sEs...........................................................Es.......................................E.....E......F.......................................E...........
+======================================================================
+ERROR: test_missing_benchmark_date_is_dropped_from_comparison_not_filled (test_benchmark.BenchmarkTests.test_missing_benchmark_date_is_dropped_from_comparison_not_filled)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_benchmark.py", line 20, in test_missing_benchmark_date_is_dropped_from_comparison_not_filled
+    curves,stats,cov=compare_equity(s,b)
+                     ^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\momentumlab\benchmark.py", line 42, in compare_equity
+    if len(missing):raise ValueError('Benchmark coverage incomplete: missing '+str(len(missing))+' strategy valuation dates, including '+', '.join(missing[:8].strftime('%Y-%m-%d'))+'. Download this date range; comparison was not shortened or forward-filled.')
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: Benchmark coverage incomplete: missing 1 strategy valuation dates, including 2024-01-03. Download this date range; comparison was not shortened or forward-filled.
+
+======================================================================
+ERROR: test_export_preview_apply_over_real_http (test_bulk_http.BulkHTTPTests.test_export_preview_apply_over_real_http)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_bulk_http.py", line 15, in test_export_preview_apply_over_real_http
+    import MomentumLabV2 as app
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\MomentumLabV2.py", line 14, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
+
+======================================================================
+ERROR: test_grid_to_live_and_exports (test_http_v4.HTTPTests.test_grid_to_live_and_exports)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_http_v4.py", line 40, in test_grid_to_live_and_exports
+    import MomentumLabV2 as app
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\MomentumLabV2.py", line 14, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
+
+======================================================================
+ERROR: test_moved_grid_uses_history_inside_verified_run (test_packaging.PackagingTests.test_moved_grid_uses_history_inside_verified_run)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_packaging.py", line 54, in test_moved_grid_uses_history_inside_verified_run
+    import MomentumLabV2 as app
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\MomentumLabV2.py", line 14, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
+
+======================================================================
+ERROR: test_http_export_upload_apply_then_explicit_publish (test_pending_builds.PendingBuildTests.test_http_export_upload_apply_then_explicit_publish)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_pending_builds.py", line 67, in test_http_export_upload_apply_then_explicit_publish
+    import MomentumLabV2 as app
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\MomentumLabV2.py", line 14, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
+
+======================================================================
+ERROR: test_request_contention (unittest.loader._FailedTest.test_request_contention)
+----------------------------------------------------------------------
+ImportError: Failed to import test module: test_request_contention
+Traceback (most recent call last):
+  File "C:\Users\betri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\loader.py", line 396, in _find_test_path
+    module = self._get_module_from_name(name)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\betri\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\Lib\unittest\loader.py", line 339, in _get_module_from_name
+    __import__(name)
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_request_contention.py", line 10, in <module>
+    import MomentumLabV2 as app
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\MomentumLabV2.py", line 14, in <module>
+    import requests
+ModuleNotFoundError: No module named 'requests'
+
+
+======================================================================
+FAIL: test_full_research_reuses_ranks_and_preserves_snapshot_and_monitor (test_performance.PerformanceTests.test_full_research_reuses_ranks_and_preserves_snapshot_and_monitor)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "C:\Users\betri\Downloads\MomentumLab_V3_3_3_1_HOTFIX_Portable_Source\MomentumLab_V3_3_3_Portable\tests\test_performance.py", line 71, in test_full_research_reuses_ranks_and_preserves_snapshot_and_monitor
+    self.assertEqual(result['top20'],expected)
+AssertionError: {'dat[824 chars]89948, 'name': ''}, {'rank': 2, 'ticker': 'T5'[3896 chars]''}]} != {'dat[824 chars]89948}, {'rank': 2, 'ticker': 'T5', 'momentum_[3824 chars]16}]}
+Diff is 10182 characters long. Set self.maxDiff to None to see it.
+
+----------------------------------------------------------------------
+Ran 173 tests in 87.987s
+
+FAILED (failures=1, errors=6, skipped=3)

@@ -1,0 +1,14 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const html=fs.readFileSync('ui/index.html','utf8'),box={};
+assert(html.includes('id="rankWeightingEnabled" type="checkbox" role="switch" style='));
+assert(!/id="rankWeightingEnabled"[^>]*checked/.test(html));
+assert(html.indexOf('id="rankWeightingEnabled"')>html.indexOf('id="participationCoverageEnabled"'));
+assert(html.includes("rank_weighting_research:$('rankWeightingEnabled').checked"));
+const ctx={$:()=>box,escapeHtml:String,pct:x=>String(x),fileUrl:String,pagedTable:(id,rows,render)=>render(rows)};vm.createContext(ctx);
+vm.runInContext(fs.readFileSync('ui/rank-weighting.js','utf8'),ctx);
+ctx.renderRankWeighting({status:'off'});assert(box.hidden);
+ctx.renderRankWeighting({status:'unavailable',error:'Baseline mismatch'});assert(box.textContent.includes('Baseline mismatch'));
+ctx.renderRankWeighting({status:'available',notes:['No production changes'],conclusion:'No advantage',summary:[],charts:{equity:'test.png'},rank_summary:[],annual_rank:[],annual:[],leader_summary:[],files:{},start:'2021',end:'2026'});
+assert(!box.hidden);assert(box.innerHTML.includes('No advantage'));assert(box.innerHTML.includes('test.png'));assert(box.innerHTML.includes('not combined'));
+ctx.renderRankWeighting({status:'off'});assert(box.hidden);assert.equal(box.innerHTML,'');
+console.log('PASS: off by default, control ordering, unavailable state, research-only rendering and stale-result clearing.');

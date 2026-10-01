@@ -1,0 +1,51 @@
+﻿method,alpha,reverse,rank,weight
+Equal weight,0.0,False,1,0.1
+Equal weight,0.0,False,2,0.1
+Equal weight,0.0,False,3,0.1
+Equal weight,0.0,False,4,0.1
+Equal weight,0.0,False,5,0.1
+Equal weight,0.0,False,6,0.1
+Equal weight,0.0,False,7,0.1
+Equal weight,0.0,False,8,0.1
+Equal weight,0.0,False,9,0.1
+Equal weight,0.0,False,10,0.1
+Mild gradient,0.5,False,1,0.14074410303990587
+Mild gradient,0.5,False,2,0.13352157985305924
+Mild gradient,0.5,False,3,0.12588535273178572
+Mild gradient,0.5,False,4,0.1177549649838823
+Mild gradient,0.5,False,5,0.10901991343009121
+Mild gradient,0.5,False,6,0.09952110967153562
+Mild gradient,0.5,False,7,0.08901438656870615
+Mild gradient,0.5,False,8,0.07708872007078786
+Mild gradient,0.5,False,9,0.06294267636589286
+Mild gradient,0.5,False,10,0.044507193284353076
+Linear gradient,1.0,False,1,0.18181818181818182
+Linear gradient,1.0,False,2,0.16363636363636364
+Linear gradient,1.0,False,3,0.14545454545454545
+Linear gradient,1.0,False,4,0.12727272727272726
+Linear gradient,1.0,False,5,0.10909090909090909
+Linear gradient,1.0,False,6,0.09090909090909091
+Linear gradient,1.0,False,7,0.07272727272727272
+Linear gradient,1.0,False,8,0.05454545454545454
+Linear gradient,1.0,False,9,0.03636363636363636
+Linear gradient,1.0,False,10,0.01818181818181818
+Reverse mild gradient,0.5,True,1,0.044507193284353076
+Reverse mild gradient,0.5,True,2,0.06294267636589286
+Reverse mild gradient,0.5,True,3,0.07708872007078786
+Reverse mild gradient,0.5,True,4,0.08901438656870615
+Reverse mild gradient,0.5,True,5,0.09952110967153562
+Reverse mild gradient,0.5,True,6,0.10901991343009121
+Reverse mild gradient,0.5,True,7,0.1177549649838823
+Reverse mild gradient,0.5,True,8,0.12588535273178572
+Reverse mild gradient,0.5,True,9,0.13352157985305924
+Reverse mild gradient,0.5,True,10,0.14074410303990587
+Reverse linear gradient,1.0,True,1,0.01818181818181818
+Reverse linear gradient,1.0,True,2,0.03636363636363636
+Reverse linear gradient,1.0,True,3,0.05454545454545454
+Reverse linear gradient,1.0,True,4,0.07272727272727272
+Reverse linear gradient,1.0,True,5,0.09090909090909091
+Reverse linear gradient,1.0,True,6,0.10909090909090909
+Reverse linear gradient,1.0,True,7,0.12727272727272726
+Reverse linear gradient,1.0,True,8,0.14545454545454545
+Reverse linear gradient,1.0,True,9,0.16363636363636364
+Reverse linear gradient,1.0,True,10,0.18181818181818182

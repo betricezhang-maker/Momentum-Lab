@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict'),vm=require('node:vm'),fs=require('node:fs'),path=require('node:path');
+const node={innerHTML:''},c=vm.createContext({document:{getElementById:()=>node}});
+vm.runInContext(fs.readFileSync(path.join(__dirname,'../ui/pagination.js'),'utf8'),c);
+c.rows=Array.from({length:5000},(_,i)=>i);
+vm.runInContext("html=pagedTable('test-rows',rows,(page,offset)=>page.map((v,i)=>'<tr>'+v+':'+(offset+i)+'</tr>').join(''))",c);
+assert.equal((c.html.match(/<tr>/g)||[]).length,50);
+assert.match(c.html,/Rows 1–50 of 5000/);
+vm.runInContext("showTablePage('test-rows',50)",c);assert.match(node.innerHTML,/<tr>50:50<\/tr>/);
+vm.runInContext("showTablePage('test-rows',4990)",c);assert.match(node.innerHTML,/<tr>4999:4999<\/tr>/);
+vm.runInContext("clearPagedTables('test'); retained=runtimeTables.size",c);assert.equal(c.retained,0);
+assert.equal(c.rows.length,5000);
+console.log('PASS: 5,000 rows render 50 at a time; original indexes, full data and scoped cleanup preserved.');

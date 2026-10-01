@@ -1,7 +1,9 @@
 <!doctype html>
 <html>
 <head>
-<meta charset="utf-8"><title>Momentum Lab V3.3.3 - Multi-Universe Research Lab</title>
+<meta charset="utf-8"><title>Momentum Lab V4.0 — Research + Live Validation</title>
+<link rel="stylesheet" href="/ui/live-portfolio.css">
+<link rel="stylesheet" href="/ui/integrity-workspace.css">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root{--bg:#f3f5f7;--panel:#fff;--ink:#17202a;--muted:#66717e;--line:#dfe4e9;--blue:#1769d2;--green:#0a7c49;--amber:#a66300;--red:#b42318}
@@ -33,19 +35,23 @@ button.danger{background:#b42318;color:white}
 .jobhead{display:flex;justify-content:space-between;margin-bottom:8px}
 .progress{height:14px;background:#e7e7e7;border-radius:999px;overflow:hidden;margin-bottom:8px}
 .progressbar{height:100%;width:0%;background:#1769d2;transition:width .25s}
+#busy.calculation-mode{inset:auto 20px 20px auto;background:transparent;pointer-events:none;box-shadow:0 3px 15px #0002}
 </style>
 </head>
 <body>
-<header><h1>Momentum Lab V3.3.3 - Multi-Universe</h1><div>Data Manager + portable local research workbench</div></header>
+<header><h1>Momentum Lab V4.0</h1><div>Research · Turnover · Manual and paper portfolio validation</div></header>
 <nav>
 <button class="tab active" data-page="dashboard">Dashboard</button>
 <button class="tab" data-page="manager">Data Manager</button>
 <button class="tab" data-page="research">Research Lab</button>
+<button class="tab" data-page="strategygrid">Strategy Grid</button>
+<button class="tab" data-page="live" onclick="loadLivePortfolios()">Live Portfolio</button>
+<button class="tab" data-page="audit" onclick="loadLiveAudit()">Audit / Export</button>
 <button class="tab" data-page="settings">Settings</button>
 </nav>
 <main>
 <section id="dashboard" class="page active">
-<div class="notice"><b>V3.3.2:</b> Strategy Grid redesigned around cross-year consistency. The primary view now compares each MOM/rebalance rule across calendar years, with positive-year count, average year, worst year, full-period return, Sharpe and drawdown. The parameter heatmap remains as a secondary sensitivity view.</div>
+<div class="notice"><b>V4.0:</b> Research a strategy, inspect gross/net returns and turnover, then add it to a manual or paper portfolio. Trades are recorded by you; Momentum Lab does not submit orders.</div>
 <div class="card" style="margin-top:14px"><h3>Data Status</h3><div id="statusGrid" class="statusgrid"></div><button class="secondary" style="margin-top:12px" onclick="loadStatus()">Refresh Status</button></div>
 <div class="grid2">
 <div class="card"><h3>Research Definition</h3><div class="small">MOM(N) = N-observation adjusted-price return / [N-observation daily-return standard deviation x sqrt(N)]. Return and volatility windows are locked together.</div></div>
@@ -54,6 +60,7 @@ button.danger{background:#b42318;color:white}
 </section>
 
 <section id="manager" class="page">
+<div class="card wide"><h3>Data Integrity</h3><div id="integrityDashboard">Run a local check before research. No data is downloaded or repaired.</div></div>
 <div class="card wide" style="margin-bottom:14px"><h3>Dataset to Manage</h3>
 <div class="row"><div><select id="dataUniverse" onchange="changeDataUniverse()">
 <option value="CSI300">CSI 300</option>
@@ -67,7 +74,6 @@ button.danger{background:#b42318;color:white}
 <div class="card"><h3>A. Locate Existing Local Data</h3>
 <div id="fileFields"></div>
 <button class="good" style="margin-top:12px" onclick="saveFiles()">Save File Locations</button>
-<button class="secondary" style="margin-top:12px" onclick="validateFiles()">Validate Research Files</button>
 <div id="validateMsg" class="small" style="margin-top:10px"></div>
 </div>
 <div class="card"><h3 id="buildTitle">B. Build CSI 300 Data From Ground Up</h3>
@@ -89,6 +95,7 @@ button.danger{background:#b42318;color:white}
   <div id="jobApi" class="small"></div>
 </div>
 <div id="buildMsg" class="small" style="margin-top:10px"></div>
+<div id="dataRequestError" class="bad" role="alert" style="white-space:pre-wrap"></div>
 </div>
 </div>
 <div class="card"><h3>C. Incremental Update</h3>
@@ -96,15 +103,17 @@ button.danger{background:#b42318;color:white}
 <div class="small" style="margin-top:8px"><span id="refreshHelp">V3.1 inspects only the selected dataset, requests the missing period, and refreshes membership/eligibility with overlap.</span></div>
 <div id="refreshMsg" class="small" style="margin-top:10px"></div>
 </div>
+<div class="card"><h3>Compress older run results</h3><p class="small">Lossless Windows NTFS compression of completed research and Strategy Grid runs. Files keep their original paths and remain readable. No results are deleted; datasets, portfolios and backups are not included. Reduces size on disk, not logical file size.</p><div class="row"><div><label for="compressionDays">No file changed in the last N days</label><input id="compressionDays" type="number" min="1" max="36500" value="30" onchange="resultCompressionToken=null;$('compressionApply').disabled=true"></div><button id="compressionPreview" onclick="previewResultCompression()">Preview older runs</button><button id="compressionApply" onclick="compressOlderResults()" disabled>Compress previewed runs</button><button onclick="watchResultCompression()">Refresh compression status</button></div><p id="compressionStatus" role="status" aria-live="polite">Choose an age and preview first. Compression is optional.</p><details><summary>Previewed runs</summary><pre id="compressionList" style="max-height:220px;overflow:auto;white-space:pre-wrap"></pre></details></div>
 </section>
 
-<section id="research" class="page"><div class="card wide"><h3>Research Universe</h3><div class="row"><div><select id="researchUniverse" onchange="changeUniverse()"><option value="CSI300">CSI 300</option><option value="CHINEXT_TOP100">ChiNext Top 100</option><option value="STAR_TOP100">STAR Top 100</option><option value="ETF_250M">Equity ETF ≥ RMB 250M</option></select></div><div id="universeMsg" class="small">Independent datasets; no cross-universe ranking.</div></div></div>
-<div class="grid3">
+<section id="research" class="page"><div class="card wide"><h3>Research Universe</h3><div class="row"><div><select id="researchUniverse" onchange="changeUniverse()"><option value="CSI300">CSI 300</option><option value="CHINEXT_TOP100">ChiNext Top 100</option><option value="STAR_TOP100">STAR Top 100</option><option value="ETF_250M">Equity ETF ≥ RMB 250M</option></select></div><div><label>Benchmark</label><select id="researchBenchmark"><option value="none">No benchmark</option><option value="configured">Configured benchmark</option></select></div><div id="universeMsg" class="small">Independent datasets; no cross-universe ranking.</div></div></div>
+<div class="grid3" style="grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
 <div class="card"><h3>1. Momentum</h3>
 <label>Primary / Backtest span</label>
-<select id="lookback"><option>10</option><option selected>20</option><option>40</option><option>60</option><option>120</option></select>
+<select id="lookback"><option>5</option><option>10</option><option selected>20</option><option>40</option><option>60</option><option>120</option></select>
 <label style="margin-top:10px">MOM Lookbacks to Compare</label>
 <div class="checkrow">
+<label><input class="spanChk" type="checkbox" value="5"> MOM5</label>
 <label><input class="spanChk" type="checkbox" value="10" checked> MOM10</label>
 <label><input class="spanChk" type="checkbox" value="20" checked> MOM20</label>
 <label><input class="spanChk" type="checkbox" value="40" checked> MOM40</label>
@@ -114,15 +123,17 @@ button.danger{background:#b42318;color:white}
 <div class="small">Primary span drives the backtest. Checked lookbacks drive the comparison heatmap only; they are not blended into the strategy.</div>
 </div>
 <div class="card"><h3>2. Selection</h3><label>Portfolio</label><select id="selection"><option>Top 5</option><option selected>Top 10</option><option>Top 20</option><option>Top 30</option><option>Top 50</option><option>Q5</option><option>Q4</option><option>Q3</option><option>Q2</option><option>Q1</option></select></div>
-<div class="card"><h3>3. Rebalance</h3><label>Every N trading days</label><select id="rebalance"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>40</option></select><label>Trading cost (bps)</label><input id="cost" type="number" value="0"></div>
+<div class="card"><h3>3. Rebalance</h3><label>Every N trading days</label><select id="rebalance"><option>5</option><option selected>10</option><option>15</option><option>20</option><option>40</option><option>60</option></select><label>Trading cost per one-way turnover</label><select onchange="if(this.value!=='custom')$('cost').value=this.value"><option value="0">0 bps</option><option selected value="5">5 bps = 0.05% = 0.5‰</option><option value="10">10 bps</option><option value="20">20 bps</option><option value="custom">Custom</option></select><input id="cost" aria-label="Research trading cost bps" type="number" min="0" max="10000" step="any" value="5"></div>
+<div class="card"><h3>4. Positive participation</h3><label for="rParticipation">Hold cash when participation is at or below</label><select id="rParticipation"><option value="off" selected>Off — original strategy</option><option value="0">0%</option><option value="0.1">10%</option><option value="0.2">20%</option><option value="0.3">30%</option><option value="0.4">40%</option><option value="0.5">50%</option><option value="0.6">60%</option><option value="0.7">70%</option><option value="0.8">80%</option><option value="0.9">90%</option><option value="1">100%</option></select><p class="small">Uses the Primary / Backtest MOM span and selected rebalance schedule. Missing participation follows baseline. Research only.</p><div id="rParticipationResult" role="status"></div></div>
 </div>
-<div class="card"><div class="row"><div><label>Start optional</label><input id="rStart" type="date"></div><div><label>End optional</label><input id="rEnd" type="date"></div><button class="primary" onclick="runResearch()">RUN FULL RESEARCH</button></div></div>
+<div class="card"><div class="row"><div><label>Start optional</label><input id="rStart" type="date"></div><div><label>End optional</label><input id="rEnd" type="date"></div><div><label><input id="participationCoverageEnabled" type="checkbox" role="switch" checked style="width:auto" onchange="$('etfParticipationCoverage').disabled=!this.checked"> Enforce minimum participation coverage</label><label for="etfParticipationCoverage">ETF participation minimum coverage (%) · diagnostic only</label><input id="etfParticipationCoverage" type="number" min="1" max="100" step="1" value="80"></div><div><label><input id="rankWeightingEnabled" type="checkbox" role="switch" style="width:auto"> Top10 rank &amp; weighting research</label><p class="small">Off by default. ETF MOM10 / Top10 / 10D / 5 bps only. Compares equal weight, mild/linear gradients and their reverse tilts (more weight on lower Top10 ranks), separately from participation cash control.</p></div><button class="primary" onclick="runResearch()">RUN FULL RESEARCH</button></div></div>
 
-<div class="card">
+<div class="card" id="strategyGridCard">
 <h3>4. Strategy Grid / Robustness Test</h3>
 <div class="small">Automatically compares the same portfolio rule across calendar years, MOM lookbacks and rebalance periods. This is for robustness testing — not automatic parameter optimization.</div>
 <div class="grid3" style="margin-top:10px">
   <div><label>MOM lookbacks</label><div class="gridchecks">
+    <label><input class="gridMom" type="checkbox" value="5" style="width:auto"> 5</label>
     <label><input class="gridMom" type="checkbox" value="10" checked style="width:auto"> 10</label>
     <label><input class="gridMom" type="checkbox" value="20" checked style="width:auto"> 20</label>
     <label><input class="gridMom" type="checkbox" value="40" checked style="width:auto"> 40</label>
@@ -152,6 +163,7 @@ button.danger{background:#b42318;color:white}
   <div><label>Heatmap metric (primary table always shows annual returns)</label><select id="gridMetric" onchange="renderStrategyGrid()"><option value="total_return">Total Return</option><option value="annualized_return">Annualized Return</option><option value="sharpe_rf0">CAGR / Ann. Vol (rf=0)</option><option value="max_drawdown">Max Drawdown</option><option value="annualized_volatility">Annualized Volatility</option></select></div>
   <div><label>Heatmap portfolio</label><select id="gridSelection" onchange="renderStrategyGrid()"><option>Run grid first</option></select></div>
   <div><label>Display period</label><select id="gridPeriod" onchange="renderStrategyGrid()"><option>Run grid first</option></select></div>
+  <div><label>Benchmark</label><select id="gridBenchmark"><option value="none">No benchmark</option><option value="configured">Configured benchmark</option></select></div><div id="gridIntegrity" class="small"></div>
   <button class="primary" onclick="runStrategyGrid()">RUN STRATEGY GRID</button>
 </div>
 <div id="gridOut" style="display:none">
@@ -168,6 +180,7 @@ button.danger{background:#b42318;color:white}
 </div>
 
 <div id="researchOut" style="display:none"><div class="card"><div id="runIdentity" style="font-weight:700"></div></div>
+<div class="card" id="participationChartPanel" hidden><h3>Participation control · Return benefit or penalty</h3><p id="participationChartSummary"></p><img id="participationComparisonChart" class="chart" alt="Original strategy versus participation-controlled cumulative net return over matching completed holding periods"><p class="small">Hypothetical comparison. Original charts remain unchanged. Select a different threshold and run research again to update this chart.</p></div>
 <div class="metrics"><div class="metric"><div class="small">Total Return</div><div id="m1" class="v"></div></div><div class="metric"><div class="small">Annualized Return</div><div id="m2" class="v"></div></div><div class="metric"><div class="small">Annualized Volatility</div><div id="m5" class="v"></div></div><div class="metric"><div class="small">CAGR / Ann. Vol (rf=0)</div><div id="m3" class="v"></div></div><div class="metric"><div class="small">Max Drawdown</div><div id="m4" class="v"></div></div></div>
 <div class="card" style="margin-top:14px"><div id="coverage" class="small"></div></div>
 <div class="card"><h3>Momentum Lookback × Forward Return</h3><div class="small">Rows are the checked MOM lookbacks. Columns are future trading-day returns. Each cell is the average forward return of the selected portfolio in this universe.</div><img id="lookbackHeat" class="chart"><div id="lookbackTable" style="margin-top:10px"></div></div>
@@ -175,18 +188,39 @@ button.danger{background:#b42318;color:white}
 <div class="card"><h3>Drawdown</h3><img id="dd" class="chart"></div>
 <div class="card"><h3>Primary MOM Signal Decay Table</h3><div id="decay"></div></div>
 <div class="card"><h3>Latest Top 20 + Multi-Span Momentum Monitor</h3><div id="top20date" class="small"></div><div id="top20table"></div></div>
+<div class="card" id="etfMomentumPanel" style="display:none"><h3>ETF Momentum Conditions · Selected Strategy</h3><p id="etfMomentumInfo" class="small"></p><div id="etfVisualizationControls" hidden><label><input type="checkbox" id="etfMedianOverlay" onchange="updateETFVisualization()" style="width:auto"> Five-rebalance trailing median (restarts after gaps)</label><label><input type="checkbox" id="etfReturnColors" onchange="updateETFVisualization()" style="width:auto"> Color markers by subsequent realized net return (retrospective)</label><p class="small">Green: positive · Red: negative · Grey: zero or unavailable. Static charts have no hover; exact values are in the CSV.</p></div><img id="etfMomentumChart" class="chart" alt="Four aligned panels: unchanged daily net cumulative return, positive MOM10 participation, selected Top10 MOM10, median eligible ETF 60-session return"><div id="etfMomentumEvidence"></div></div>
+<div class="card" id="rankWeightingResults" hidden></div>
 <div class="card"><h3>Past 10 Trading-Observation Price Trends</h3><div id="trendCharts" class="grid2"></div></div>
 <div class="card"><h3>Saved Results</h3><div id="saved" class="small"></div></div>
 </div>
 </section>
 
-<section id="settings" class="page">
+<section id="strategygrid" class="page"><div class="card"><h3>Strategy Grid</h3><div class="row"><div><label for="gridUniverse">Universe</label><select id="gridUniverse" onchange="$('researchUniverse').value=this.value;changeUniverse()"><option value="CSI300">CSI 300</option><option value="CHINEXT_TOP100">ChiNext Top 100</option><option value="STAR_TOP100">STAR Top 100</option><option value="ETF_250M">Equity ETF ≥ RMB250M</option></select></div><div><label>Cost preset</label><select onchange="if(this.value!=='custom')$('gridCost').value=this.value"><option value="0">0 bps</option><option value="5" selected>5 bps = 0.05% = 0.5‰</option><option value="10">10 bps</option><option value="20">20 bps</option><option value="custom">Custom</option></select></div><div><label for="gridCost">Cost bps per one-way turnover</label><input id="gridCost" type="number" min="0" max="10000" step="any" value="5"></div></div><p class="small">Equity ETF ≥ RMB250M — Excludes bond, cash/money-market and commodity/gold ETFs. Eligibility is validated before each ETF run.</p></div></section>
+<section id="live" class="page"><div class="card"><h3>Live Portfolio</h3><div class="row"><div><label for="liveView">Portfolio view</label><select id="liveView" onchange="loadLivePortfolios()"><option value="active">Active / Paper / Paused</option><option value="closed">Closed</option><option value="archived">Archived</option><option value="all">All portfolios</option></select></div><div><label for="liveSelector">Portfolio</label><select id="liveSelector" onchange="loadLiveDetail()"><option value="">No portfolio selected</option></select></div><button class="secondary" onclick="loadLivePortfolios()">Reload portfolios</button><button class="primary" onclick="loadLiveDetail(true)">Refresh &amp; Save Snapshot</button></div><p id="liveMessage" class="small">Create a portfolio from a tested Strategy Grid row.</p></div><div id="liveContent"></div></section>
+<section id="audit" class="page"><div class="card"><h3>A. Portfolio Audit Trail</h3><p>Uses the portfolio selected in Live Portfolio. Trade corrections retain their original versions.</p><button class="primary" onclick="exportLive()">Export portfolio CSVs and audit</button><button class="secondary" onclick="loadLiveAudit()">Refresh audit</button><div id="liveExports"></div></div><div id="liveAudit"></div>
+<div class="card"><h3>B. Research / MOM Calculation Audit</h3><p>Inspect production inputs and retained calculation columns. Permanent portfolio events remain separate. Comparison strategy: Top10 / 10D.</p>
+<form onsubmit="runResearchAudit(event)"><div class="row">
+<div><label for="auditUniverse">Universe</label><select id="auditUniverse"><option value="CSI300">CSI300</option><option value="CHINEXT_TOP100">ChiNext Top100</option><option value="STAR_TOP100">STAR Top100</option><option value="ETF_250M" selected>Equity ETF ≥ RMB250M</option></select></div>
+<div><label for="auditSignal">Exact signal date</label><input id="auditSignal" type="date" required></div>
+<div><label for="auditLookback">MOM lookback</label><select id="auditLookback"><option>5</option><option selected>10</option><option>20</option><option>40</option><option>60</option><option>120</option></select></div>
+<div><label for="auditTicker">Ticker (required for single ticker)</label><input id="auditTicker" placeholder="159208.SZ"></div>
+<div><label for="auditMode">Audit mode</label><select id="auditMode"><option>Single Ticker Calculation</option><option>Top Ranking Audit</option><option>Full Signal Audit Package</option></select></div>
+</div><button id="auditRun" class="primary">Run Calculation Audit</button></form><p id="researchAuditMessage" role="status"></p></div><div id="researchAuditResult"></div></section>
+<dialog id="createLiveDialog" onclose="invalidateHistoricalPreview()"><form onsubmit="createLivePortfolio(event)"><h3>Create Portfolio</h3><p id="createStrategyIdentity"></p><label for="liveName">Portfolio name</label><input id="liveName" oninput="updateCreateLiveState()" required maxlength="120"><label for="liveCreateStatus">Tracking mode</label><select id="liveCreateStatus" onchange="updateCreateLiveState()"><option value="PAPER">PAPER — automatic simulated holdings</option><option value="ACTIVE">ACTIVE — actual manual trades</option></select><label for="liveStartMode">Start mode</label><select id="liveStartMode" onchange="toggleHistoricalInputs()"><option value="today">Start Today</option><option value="historical">Start From Historical Date</option></select><label id="liveStartLabel" for="liveStart">Start tracking today</label><input id="liveStart" type="date" required onchange="invalidateHistoricalPreview()"><div id="historicalEndBox" hidden><label for="liveStartDateType">Historical date represents</label><select id="liveStartDateType" onchange="invalidateHistoricalPreview()"><option value="SIGNAL">Signal date</option><option value="EXECUTION">Execution / rebalance date</option></select><label for="liveEnd">Historical end date</label><input id="liveEnd" type="date" onchange="invalidateHistoricalPreview()"><button id="previewHistoricalBtn" type="button" class="secondary" onclick="previewHistoricalTarget()">Preview Signal → Execution Target</button><div id="historicalPreview" class="small"></div></div><label for="liveCapital">Starting capital / paper notional (RMB)</label><input id="liveCapital" oninput="updateCreateLiveState()" type="number" min="1" step="0.01" required><label for="liveCost">Trading cost (bps per one-way turnover)</label><input id="liveCost" type="number" min="0" max="10000" step="any" required onchange="invalidateHistoricalPreview()"><p class="small">PAPER automatically follows saved strategy targets. ACTIVE holds cash until actual trades are recorded. Historical preview always labels the distinct signal and execution dates.</p><p id="createLiveReasons" class="small" aria-live="polite"></p><p id="createLiveError" class="bad"></p><div class="row"><button type="button" class="secondary" onclick="$('createLiveDialog').close()">Cancel</button><button id="createLiveSubmit" class="primary" type="submit">Create Portfolio</button></div></form></dialog>
+<dialog id="promoteDialog"><form onsubmit="continueAsActive(event)"><h3>Continue Paper Trial as Active</h3><p>Opening NAV, cash, quantities, cost basis, schedule and linked Paper history carry into the new ACTIVE portfolio.</p><label for="promoteName">Active portfolio name</label><input id="promoteName" required maxlength="120"><label for="promoteDate">Activation date</label><input id="promoteDate" type="date" required><p id="promoteOpeningState" class="small"></p><p id="promoteError" class="bad"></p><div class="row"><button type="button" class="secondary" onclick="$('promoteDialog').close()">Cancel</button><button class="primary">Continue Portfolio as Active</button></div></form></dialog>
+<dialog id="tradeDialog"><form onsubmit="saveLiveTrade(event)"><h3 id="tradeTitle">Record Trade</h3><label for="tradeTicker">Ticker</label><input id="tradeTicker" required maxlength="32"><label for="tradeSide">Action</label><select id="tradeSide"><option>BUY</option><option>SELL</option><option>DIVIDEND</option><option>SPLIT</option></select><label for="tradeDate">Trade / adjustment date</label><input id="tradeDate" type="date" required><label for="tradePrice">Actual price (RMB); DIVIDEND: total cash received</label><input id="tradePrice" type="number" min="0" step="any" required><label for="tradeQuantity">Quantity; SPLIT: share multiplier (e.g. 2); DIVIDEND: 0</label><input id="tradeQuantity" type="number" min="0" step="any" required><label for="tradeFee">Actual fee (RMB)</label><input id="tradeFee" type="number" min="0" step="any" value="0" required><label for="tradeNotes">Notes / correction reason</label><textarea id="tradeNotes" maxlength="2000"></textarea><p id="tradeError" class="bad"></p><div class="row"><button type="button" class="secondary" onclick="$('tradeDialog').close()">Cancel</button><button type="submit" class="primary">Save Record</button></div></form></dialog>
+<dialog id="rebalanceDialog"><form onsubmit="saveActualRebalance(event)"><h3>Record Actual Rebalance</h3><p id="rebalanceDialogInfo"></p><div id="rebalanceTradeRows" class="table-scroll"></div><label><input id="rebalanceCompleted" type="checkbox"> Mark this rebalance completed after recording these fills</label><label for="rebalanceNotes">Rebalance notes</label><textarea id="rebalanceNotes" maxlength="2000"></textarea><p class="small">Uncheck skipped fills. Quantities, prices, dates and fees remain editable; partial execution preserves the model target separately.</p><p id="rebalanceError" class="bad"></p><div class="row"><button type="button" class="secondary" onclick="$('rebalanceDialog').close()">Cancel</button><button type="submit" class="primary">Save Confirmed Trades</button></div></form></dialog>
+<dialog id="deletePortfolioDialog"><form onsubmit="confirmDeletePortfolio(event)"><h3>Permanently Delete Portfolio</h3><div id="deletePortfolioSummary"></div><label for="deletePortfolioConfirmation">Type DELETE to confirm</label><input id="deletePortfolioConfirmation" autocomplete="off" required><p class="bad">This permanently deletes only this portfolio’s trades, signals, rebalances, cash flows, NAV snapshots and audit events.</p><p id="deletePortfolioError" class="bad"></p><div class="row"><button type="button" class="secondary" onclick="$('deletePortfolioDialog').close()">Cancel</button><button type="submit" class="primary">Delete Portfolio</button></div></form></dialog>
+<dialog id="journalDialog"><form onsubmit="saveLiveJournal(event)"><h3>Record Actual Rebalance</h3><p class="small">Groups unjournaled BUY/SELL records through this date. Original journals remain unchanged after later trade corrections.</p><label for="journalSignal">Model target</label><select id="journalSignal"></select><label for="journalDate">Completion date</label><input id="journalDate" type="date" required><label for="journalNotes">Notes / delays</label><textarea id="journalNotes" maxlength="2000"></textarea><p id="journalError" class="bad"></p><div class="row"><button class="secondary" type="button" onclick="$('journalDialog').close()">Cancel</button><button class="primary">Record Rebalance</button></div></form></dialog>
+<dialog id="historyDialog" onclose="clearPagedTables('history-dialog')"><h3>Backtest Rebalance History</h3><div id="historyContent"></div><button class="secondary" onclick="$('historyDialog').close()">Close</button></dialog>
+<section id="settings" class="page"><div class="card"><h3>Runtime Cache</h3><button class="secondary" onclick="clearRuntimeCache()">Clear Runtime Cache</button><p id="runtimeCacheMessage">Clears temporary memory only. Saved market data, research results and portfolios are retained.</p></div>
 <div class="grid2">
 <div class="card"><h3>Storage</h3><label>Data folder</label><div class="row"><div><input id="data_folder"></div><button class="secondary" onclick="browseFolder('data_folder')">Browse</button></div><label>Results folder</label><div class="row"><div><input id="results_folder"></div><button class="secondary" onclick="browseFolder('results_folder')">Browse</button></div></div>
 <div class="card"><h3>Tushare</h3><label>Token</label><input id="tushare_token" type="password"><label>Proxy URL</label><input id="proxy_url">
 <label>Safe API speed (requests/minute)</label><input id="api_requests_per_minute" type="number" min="30" max="390" value="240">
 <div class="small">Recommended: 240/min. Your current proxy message says the allowance is 400/min, so V2.3 deliberately stays well below it.</div>
 <label>Cooldown after frequency-limit error (seconds)</label><input id="api_cooldown_seconds" type="number" min="60" value="370">
+<h3 style="margin-top:16px">Benchmark</h3><label>Benchmark CSV path</label><input id="benchmark_csv" placeholder="data/benchmarks/CSI300.csv"><label>Benchmark ticker</label><input id="benchmark_ticker" placeholder="000300.SH"><label>Benchmark name</label><input id="benchmark_name" placeholder="CSI 300 Index"><label>Return basis</label><select id="benchmark_basis"><option value="price_return">Price return</option><option value="adjusted_etf_return">Adjusted ETF return</option><option value="total_return">Total return</option></select>
 <button class="good" style="margin-top:12px" onclick="saveSettings()">Save Settings</button><button class="secondary" style="margin-top:12px" onclick="testApi()">Test Connection</button><div id="apiMsg" class="small" style="margin-top:8px"></div></div>
 </div>
 </section>
@@ -198,7 +232,7 @@ const fileDefs=[
  ['raw_price_csv','Raw Prices'],['adjusted_price_csv','Adjusted Prices'],['weights_csv','Membership / Eligibility'],
  ['adj_factor_csv','Adjustment Factors'],['trade_calendar_csv','Trading Calendar'],['price_limits_csv','Price Limits']
 ];
-document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active')});
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));document.querySelectorAll('.page').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.page).classList.add('active');if(b.dataset.page==='live')loadLivePortfolios();if(b.dataset.page==='audit')loadLiveAudit()});
 function busy(v,t='Working...'){$('busyText').textContent=t;$('busy').style.display=v?'flex':'none'}
 async function api(url,body=null){const o=body===null?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)};const r=await fetch(url,o);const j=await r.json();if(!r.ok||j.ok===false)throw new Error(j.error||((j.errors||[]).join('\n'))||'Request failed');return j}
 function pct(v){return v==null?'—':(v*100).toFixed(2)+'%'}
@@ -213,8 +247,8 @@ function renderFileFields(){
    <input id="upload_${id}" type="file" accept=".csv,text/csv" style="display:none" onchange="importCsv('${id}',this)">
  </div>`).join('');
 }
-async function loadConfig(){const c=await api('/api/config');Object.keys(c).forEach(k=>{if($(k))$(k).value=c[k]??''});if($('dataUniverse'))$('dataUniverse').value=c.active_universe||'CSI300';if($('researchUniverse'))$('researchUniverse').value=c.active_universe||'CSI300';updateUniverseLabels(c.active_universe||'CSI300');loadStatus()}
-async function saveSettings(){const c={};['data_folder','results_folder','tushare_token','proxy_url','api_requests_per_minute','api_cooldown_seconds'].forEach(k=>c[k]=$(k).value);await api('/api/config',c);$('apiMsg').innerHTML='<span class="ok">Saved.</span>'}
+async function loadConfig(){const c=await api('/api/config');Object.keys(c).forEach(k=>{if($(k))$(k).value=c[k]??''});if($('dataUniverse'))$('dataUniverse').value=c.active_universe||'CSI300';if($('researchUniverse'))$('researchUniverse').value=c.active_universe||'CSI300';updateUniverseLabels(c.active_universe||'CSI300');if(typeof wsLoadBuilds==='function'&&$('wsBuild'))wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));loadStatus()}
+async function saveSettings(){const c={};['data_folder','results_folder','tushare_token','proxy_url','api_requests_per_minute','api_cooldown_seconds','benchmark_csv','benchmark_ticker','benchmark_name','benchmark_basis'].forEach(k=>c[k]=$(k).value);await api('/api/config',c);$('apiMsg').innerHTML='<span class="ok">Saved.</span>'}
 async function saveFiles(){const c={};fileDefs.forEach(([id])=>c[id]=$(id).value);await api('/api/config',c);$('validateMsg').innerHTML='<span class="ok">File locations saved.</span>';loadStatus()}
 async function browseFile(id,title){
  try{
@@ -243,25 +277,27 @@ async function importCsv(id,input){
 }
 async function browseFolder(id){const j=await api('/api/browse-folder',{initial:$(id).value});if(j.path)$(id).value=j.path}
 async function testApi(){busy(true,'Testing Tushare...');try{await saveSettings();const j=await api('/api/test-tushare',{});$('apiMsg').innerHTML='<span class="ok">'+j.message+' Rows: '+j.rows+'</span>'}catch(e){$('apiMsg').innerHTML='<span class="bad">'+e.message+'</span>'}finally{busy(false)}}
-async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('')}
-async function validateFiles(){await saveFiles();const j=await api('/api/validate',{});$('validateMsg').innerHTML=j.ok?'<span class="ok">✓ Research files are ready.</span>':'<span class="bad">'+j.errors.join('<br>')+'</span>'}
+async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).filter(([k])=>names[k]).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('')}
+async function validateFiles(){try{await checkIntegrity($('researchUniverse').value)}catch(e){$('validateMsg').textContent=e.message}}
 async function fullBuild(){
+ $('dataRequestError').textContent='';
  try{
    await saveSettings();
    const u=$('dataUniverse').value;
    const j=await api('/api/full-build',{universe:u,start_date:$('buildStart').value,end_date:$('buildEnd').value,include_limits:$('includeLimits').checked});
    $('buildMsg').innerHTML='<span class="ok">Background build started for '+universeLabel(u)+'.</span>';
    renderJob(j.job);
- }catch(e){$('buildMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+ }catch(e){$('dataRequestError').textContent='Build did not start: '+e.message}
 }
 async function refreshData(){
+ $('dataRequestError').textContent='';
  try{
    await saveSettings();
    const u=$('dataUniverse').value;
    const j=await api('/api/refresh',{universe:u,end_date:$('refreshEnd').value});
    $('refreshMsg').innerHTML='<span class="ok">Background update started for '+universeLabel(u)+'.</span>';
    renderJob(j.job);
- }catch(e){$('refreshMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
+ }catch(e){$('dataRequestError').textContent='Update did not start: '+e.message}
 }
 async function cancelJob(){
  try{
@@ -286,7 +322,7 @@ function renderJob(j){
  const active=['running','cancelling'].includes(j.status);
  const setDis=(id,v)=>{const e=$(id);if(e)e.disabled=v};
  const setTxt=(id,v)=>{const e=$(id);if(e)e.textContent=v};
- const setHtml=(id,v)=>{const e=$(id);if(e)e.innerHTML=v};
+ const setHtml=(id,v)=>{const e=$(id);if(e&&e._jobHtml!==v){e.innerHTML=v;e._jobHtml=v}};
 
  setDis('buildBtn',active);
  setDis('updateBtn',active);
@@ -300,20 +336,30 @@ function renderJob(j){
  const pctg=j.total?Math.min(100,Math.round((j.current/j.total)*100)):0;
  const bar=$('jobBar'); if(bar)bar.style.width=pctg+'%';
 
- setHtml('jobStage','<b>Stage '+(j.stage_index||0)+' / '+(j.stage_total||0)+': '+(j.stage||'—')+'</b><br>'+(j.message||''));
+ let stageHtml='<b>Stage '+(j.stage_index||0)+' / '+(j.stage_total||0)+': '+escapeHtml(j.stage||'—')+'</b><br>'+escapeHtml(j.message||'');
+ if(j.checkpoint_notice)stageHtml+='<br><span class="warn">'+escapeHtml(j.checkpoint_notice)+'</span>';
+ if(Array.isArray(j.stage_results)&&j.stage_results.length){
+   stageHtml+='<ul class="job-stage-results">'+j.stage_results.map(x=>'<li><b>'+escapeHtml(x.stage||'')+'</b>: '+escapeHtml(x.status||'')+' '+escapeHtml(Object.entries(x).filter(([k])=>!['stage','status'].includes(k)).map(([k,v])=>k+'='+v).join(' · '))+'</li>').join('')+'</ul>';
+ }
+ setHtml('jobStage',stageHtml);
  setTxt('jobCounters',j.total?('Progress: '+Number(j.current||0).toLocaleString()+' / '+Number(j.total||0).toLocaleString()+' ('+pctg+'%)'):'');
- setTxt('jobApi','API requests in last minute: '+(j.api_requests_last_minute||0)+(j.cooldown_remaining?(' · Cooldown: '+j.cooldown_remaining+'s'):''));
+ setTxt('jobApi',j.worker_active===true?'API requests in last minute: '+(j.api_requests_last_minute||0)+(j.cooldown_remaining?(' · Cooldown: '+j.cooldown_remaining+'s'):''):'');
+ if(active) setHtml('buildMsg','<span class="small">'+escapeHtml(j.message||'Worker starting…')+'</span>');
 
  if(j.status==='completed' && lastCompletedJob!==j.started_at){
    lastCompletedJob=j.started_at;
    setHtml('buildMsg','<span class="ok">✓ Data job completed.</span>');
+   if(j.result?.integrity){renderIntegrity(j.result.integrity);setHtml('buildMsg','FINAL DATASET: '+escapeHtml(j.result.integrity.status));}
    loadConfig();
  }
  if(j.status==='cancelled'){
    setHtml('buildMsg','<span class="warn">Build cancelled. Downloaded progress/checkpoints were preserved. Click RESUME when ready.</span>');
  }
  if(j.status==='error'){
-   setHtml('buildMsg','<span class="bad">'+(j.last_error||j.message||'Data job failed')+'</span>');
+   const findings=j.integrity?.completeness?.findings||[];
+   const blockers=findings.filter(x=>x.blocks_research);
+   const diagnostic=(j.retained_build_id?'<p>Downloaded files retained as build <b>'+escapeHtml(j.retained_build_id)+'</b>. In the integrity workspace, click Refresh retained builds, select this build, then review or repair its findings. Production publication is a separate action.</p>':'')+(j.integrity?'<details><summary>Failed staged-data validation: '+blockers.length+' blocking findings (production data was not replaced)</summary><pre>'+escapeHtml(JSON.stringify(j.integrity,null,2))+'</pre></details>':'');
+   setHtml('buildMsg','<span class="bad" style="white-space:pre-wrap">FAILED · '+escapeHtml(j.request?.universe||'')+' · '+escapeHtml(j.stage||'')+': '+escapeHtml(j.last_error||j.message||'Data job failed')+'</span>'+diagnostic+(j.traceback?'<details><summary>Error details</summary><pre>'+escapeHtml(j.traceback)+'</pre></details>':''));
  }
  if(j.status==='idle'){
    setHtml('buildMsg','<span class="small">No active data job.</span>');
@@ -330,31 +376,69 @@ async function resetJob(){
  }
 }
 async function pollJob(){
- try{const x=await api('/api/job-status');renderJob(x.job)}catch(e){}
+ if(pollJob.pending)return;
+ pollJob.pending=true;
+ try{const x=await api('/api/job-status');renderJob(x.job)}catch(e){
+   $('jobStatus').textContent='CONNECTION LOST · worker status unknown';
+   $('jobApi').textContent='';
+   $('buildMsg').textContent='Cannot read worker status: '+e.message;
+ }finally{pollJob.pending=false}
 }
 setInterval(pollJob,1000);
 function fileUrl(p){return '/file?path='+encodeURIComponent(p)+'&t='+Date.now()}
+function updateETFVisualization(){
+ const key=String(Number($('etfMedianOverlay').checked))+String(Number($('etfReturnColors').checked));
+ const path=$('etfMomentumChart').etfVariants?.[key];if(path)$('etfMomentumChart').src=fileUrl(path);
+}
 async function runResearch(){
  const u=$('researchUniverse').value;
  const lb=+$('lookback').value;
  const spans=[...document.querySelectorAll('.spanChk:checked')].map(x=>+x.value);
  if(!spans.length){alert('Choose at least one MOM lookback to compare.');return;}
- busy(true,'Running '+universeLabel(u)+' MOM'+lb+' research...');
+ calculationBusy(true,'Running '+universeLabel(u)+' MOM'+lb+' research...');
  try{
-   const j=await api('/api/run',{universe:u,lookback:lb,display_spans:spans,selection:$('selection').value,rebalance_days:+$('rebalance').value,trading_cost_bps:+$('cost').value,start_date:$('rStart').value,end_date:$('rEnd').value});
+   const j=await api('/api/run',{universe:u,lookback:lb,display_spans:spans,selection:$('selection').value,rebalance_days:+$('rebalance').value,trading_cost_bps:+$('cost').value,start_date:$('rStart').value,end_date:$('rEnd').value,benchmark:$('researchBenchmark')?.value||'none',etf_participation_min_coverage:Number($('etfParticipationCoverage').value)/100,participation_coverage_enabled:$('participationCoverageEnabled').checked,participation_threshold:$('rParticipation').value,rank_weighting_research:$('rankWeightingEnabled').checked});
+   if(typeof renderRankWeighting==='function')renderRankWeighting(j.rank_weighting_research);
+   const pc=j.participation_control;
+   $('participationChartPanel').hidden=!(pc?.status==='available'&&pc.chart);
+   $('participationComparisonChart').removeAttribute('src');
+   $('participationChartSummary').textContent='';
+   if(pc?.status==='available'&&pc.chart){
+     $('participationComparisonChart').src=fileUrl(pc.chart);
+     const delta=pc.stats.return_difference*100;
+     $('participationChartSummary').textContent='Original: '+pct(pc.stats.baseline_return)+' · Participation controlled: '+pct(pc.stats.cash_warning_return)+' · '+(delta>=0?'Benefit: +':'Penalty: ')+delta.toFixed(2)+' percentage points · '+pc.stats.start+' → '+pc.stats.end+' · coverage fallbacks: '+pc.stats.fallback_periods;
+   }
+   $('rParticipationResult').textContent='';
+   if(pc?.status==='available'){
+     const ps=pc.stats;
+     $('rParticipationResult').innerHTML='<b>MOM'+pc.lookback+' · '+escapeHtml(pc.selection)+' · '+pc.rebalance_days+'D · cash ≤ '+pct(pc.threshold)+'</b><p>Matching-period baseline: '+pct(ps.baseline_return)+'<br>With participation control: '+pct(ps.cash_warning_return)+'<br>Minimum coverage: '+(pc.coverage===0?'Off — uses available valid scores':pct(pc.coverage))+'<br>Cash periods: '+ps.cash_periods+'/'+ps.periods+'<br>Missing/low-coverage fallbacks: '+ps.fallback_periods+'</p><details><summary>Comparison assumptions</summary><p>'+escapeHtml(ps.start)+' → '+escapeHtml(ps.end)+'. Completed execution-to-execution periods only; unfinished final period excluded. Cash earns 0%. Invested periods retain modeled costs, plus conservative cash/stock transition charges of half the configured turnover-cost rate. Saved valuation conventions remain in effect. This hypothetical comparison does not alter the original backtest or live portfolio.</p></details>';
+   }else if(pc?.status==='unavailable')$('rParticipationResult').textContent='Comparison unavailable: '+pc.error;
    $('researchOut').style.display='block';
    const r=j.run||{};
    $('runIdentity').innerHTML='RUN: <b>'+(r.universe_label||universeLabel(u))+'</b> · <b>MOM'+(r.lookback||lb)+'</b> · <b>'+(r.selection||$('selection').value)+'</b> · Rebalance <b>'+(r.rebalance_days||+$('rebalance').value)+'D</b> · Cost <b>'+((r.trading_cost_bps??+$('cost').value))+' bps</b>';
    $('m1').textContent=pct(j.stats.total_return);$('m2').textContent=pct(j.stats.annualized_return);$('m5').textContent=pct(j.stats.annualized_volatility);$('m3').textContent=j.stats.sharpe_rf0==null?'—':j.stats.sharpe_rf0.toFixed(2);$('m4').textContent=pct(j.stats.max_drawdown);
    const reqRange=(j.requested_start||j.usable_start)+' → '+(j.requested_end||j.usable_end);
-   $('coverage').innerHTML='Dataset: <b>'+(r.universe_label||universeLabel(u))+'</b> · Available: <b>'+j.usable_start+' → '+j.usable_end+'</b> · Requested: <b>'+reqRange+'</b> · Backtest actually used: <b>'+j.backtest_start+' → '+j.backtest_end+'</b> · observations: <b>'+j.stats.observations+'</b> · snapshots: <b>'+j.snapshots+'</b>';
+   $('coverage').innerHTML='Dataset: <b>'+(r.universe_label||universeLabel(u))+'</b> · Available: <b>'+j.usable_start+' → '+j.usable_end+'</b> · Requested: <b>'+reqRange+'</b> · Backtest actually used: <b>'+j.backtest_start+' → '+j.backtest_end+'</b> · observations: <b>'+j.stats.observations+'</b> · snapshots: <b>'+j.snapshots+'</b>'+ (j.benchmark?.ticker?'<br>Benchmark: <b>'+escapeHtml(j.benchmark.name)+' ('+escapeHtml(j.benchmark.ticker)+')</b> · basis: '+escapeHtml(j.benchmark.basis_label)+' · '+escapeHtml(j.benchmark.coverage?.actual_start||'')+' → '+escapeHtml(j.benchmark.coverage?.actual_end||''):'');
    $('lookbackHeat').src=fileUrl(j.files.lookback_heatmap);$('heat').src=fileUrl(j.files.heatmap);$('eq').src=fileUrl(j.files.equity);$('dd').src=fileUrl(j.files.drawdown);
+   if(j.benchmark?.chart){let b=document.getElementById('benchmarkChart');if(!b){b=document.createElement('img');b.id='benchmarkChart';b.className='chart';document.getElementById('researchOut').appendChild(b)}b.src=fileUrl(j.benchmark.chart)}
    const lbgs=Object.keys(j.lookback_comparison||{});
    if(lbgs.length){const lbcs=Object.keys(j.lookback_comparison[lbgs[0]]);let lh='<table><tr><th>Lookback</th>'+lbcs.map(c=>'<th>'+c+'</th>').join('')+'</tr>';for(const g of lbgs)lh+='<tr><td><b>'+g+'</b></td>'+lbcs.map(c=>'<td>'+(j.lookback_comparison[g][c]==null?'—':(j.lookback_comparison[g][c]*100).toFixed(2)+'%')+'</td>').join('')+'</tr>';lh+='</table>';$('lookbackTable').innerHTML=lh;}
    const gs=Object.keys(j.decay),cs=Object.keys(j.decay[gs[0]]);let h='<table><tr><th>Group</th>'+cs.map(c=>'<th>+'+c+'</th>').join('')+'</tr>';for(const g of gs)h+='<tr><td>'+g+'</td>'+cs.map(c=>'<td>'+(j.decay[g][c]==null?'—':(j.decay[g][c]*100).toFixed(2)+'%')+'</td>').join('')+'</tr>';h+='</table>';$('decay').innerHTML=h;
    renderTop20(j.top20);$('saved').textContent=j.files.folder;
+   const em=j.etf_momentum_monitor;$('etfMomentumPanel').style.display=em?'block':'none';
+   $('etfMomentumInfo').textContent=em?em.note:'';
+   $('etfMomentumChart').style.display=em?.status==='available'?'block':'none';
+   $('etfMomentumEvidence').innerHTML='';
+   $('etfVisualizationControls').hidden=!em?.chart_variants;
+   $('etfMomentumChart').etfVariants=em?.chart_variants||{};
+   $('etfMedianOverlay').checked=false;$('etfReturnColors').checked=false;
+   if(em?.status==='available'){
+     $('etfMomentumChart').src=fileUrl(em.chart);
+     $('etfMomentumEvidence').innerHTML='<a download href="'+escapeHtml(fileUrl(em.csv))+'">Download indicator data and coverage (CSV)</a>';
+   }
    labelResearchResults(j);
- }catch(e){alert(e.message)}finally{busy(false)}
+   if(typeof renderV4Research==='function')renderV4Research(j);
+ }catch(e){alert(e.message)}finally{calculationBusy(false)}
 }
 
 let strategyGridData=null;
@@ -362,24 +446,27 @@ function gridMetricText(metric,v){
  if(v==null||!Number.isFinite(Number(v)))return '—';
  v=Number(v);
  if(metric==='sharpe_rf0')return v.toFixed(2);
+ if(metric==='average_holdings_retained'||metric==='average_holdings_replaced')return v.toFixed(2);
  return (v*100).toFixed(2)+'%';
 }
 function gridCellStyle(metric,v,vals){
  if(v==null||!Number.isFinite(Number(v)))return '';
- if(metric==='max_drawdown')return drawdownStyle(v);
+ if(metric.includes('drawdown'))return drawdownStyle(v);
  const nums=vals.filter(x=>x!=null&&Number.isFinite(Number(x))).map(Number);
  if(!nums.length)return '';
- if(metric==='total_return'||metric==='annualized_return')return returnStyle(v,Math.max(...nums.map(Math.abs)));
+ if(['total_return','annualized_return','gross_return','net_return','gross_cagr','net_cagr'].includes(metric))return returnStyle(v,Math.max(...nums.map(Math.abs)));
  const min=Math.min(...nums),max=Math.max(...nums);
  let t=(max===min)?0.5:(Number(v)-min)/(max-min);
- if(metric==='annualized_volatility')t=1-t;
+ if(metric==='annualized_volatility'||metric.includes('turnover')||metric==='trading_cost_drag')t=1-t;
  // soft red -> white -> green. Drawdown is less negative = better, so normal numeric ordering still works.
  let bg;
  if(t<0.5){const a=(0.5-t)*2;bg=`rgba(180,35,24,${0.08+0.30*a})`;}
  else{const a=(t-0.5)*2;bg=`rgba(10,124,73,${0.08+0.30*a})`;}
  return 'background:'+bg+';font-weight:650';
 }
+let strategyGridPending=false;
 async function runStrategyGrid(){
+ if(strategyGridPending)return;
  const u=$('researchUniverse').value;
  const moms=[...document.querySelectorAll('.gridMom:checked')].map(x=>+x.value);
  const rbs=[...document.querySelectorAll('.gridRb:checked')].map(x=>+x.value);
@@ -388,9 +475,13 @@ async function runStrategyGrid(){
  if(!moms.length){alert('Choose at least one MOM lookback.');return}
  if(!rbs.length){alert('Choose at least one rebalance period.');return}
  const years=$('gridYears').value.split(',').map(x=>x.trim()).filter(Boolean).map(Number).filter(Number.isFinite);
- busy(true,'Running strategy robustness grid...');
+ strategyGridPending=true;
+ if($('gridIntegrity'))$('gridIntegrity').textContent='Run received. Checking dataset eligibility and calculating Strategy Grid…';
+ calculationBusy(true,'Checking dataset eligibility and running Strategy Grid…');
  try{
-   const j=await api('/api/strategy-grid',{universe:u,selection_rule:$('selection') ? $('selection').value : 'Top 10',trading_cost_bps:+$('cost').value,lookbacks:moms,rebalances:rbs,selections:sels,years:years,include_full:$('gridFull').checked});
+   // The server applies the same current-data integrity gate as Research Lab.
+   // Do not launch a separate Data Manager full-check job before this request.
+   const j=await api('/api/strategy-grid',{universe:u,selection_rule:$('selection') ? $('selection').value : 'Top 10',trading_cost_bps:+$('gridCost').value,lookbacks:moms,rebalances:rbs,selections:sels,years:years,include_full:$('gridFull').checked,benchmark:$('gridBenchmark')?.value||'none'});
    strategyGridData=j;
    $('gridSelection').innerHTML=j.selection_rules.map(s=>'<option>'+escapeHtml(s)+'</option>').join('');
    $('gridPeriod').innerHTML=j.periods.map(p=>'<option>'+p+'</option>').join('');
@@ -398,7 +489,9 @@ async function runStrategyGrid(){
    $('gridOut').style.display='block';
    $('gridSaved').textContent=j.files.csv;
    renderStrategyGrid();
- }catch(e){alert(e.message)}finally{busy(false)}
+   if($('gridIntegrity'))$('gridIntegrity').textContent='Strategy Grid completed.';
+   if($('gridMeta')&&j.benchmark) $('gridMeta').textContent='Benchmark: '+(j.benchmark.ticker||'none')+' · '+(j.benchmark.basis_label||'not selected')+' · same benchmark configuration used for Research Lab.';
+ }catch(e){if($('gridIntegrity'))$('gridIntegrity').textContent='Strategy Grid failed: '+e.message;alert(e.message)}finally{strategyGridPending=false;calculationBusy(false)}
 }
 function returnStyle(v,limit){
  if(v==null||!Number.isFinite(Number(v)))return '';
@@ -472,7 +565,7 @@ function renderStrategyGrid(){
  $('gridSummary').innerHTML=h+'</table>';
  const rows=j.rows.filter(r=>r.period===period&&r.selection===selection&&!r.error);
  const vals=rows.map(r=>r[metric]);
- const scaleLabel=metric==='total_return'||metric==='annualized_return'?'diverging scale centered at 0%: red = negative, green = positive':metric==='max_drawdown'?'risk scale: green ≤ 10%, amber ≤ 25%, red > 25% drawdown magnitude':`relative scale: green = ${metric==='annualized_volatility'?'lower':'higher'}`;
+ const scaleLabel=['total_return','annualized_return','gross_return','net_return','gross_cagr','net_cagr'].includes(metric)?'diverging scale centered at 0%: red = negative, green = positive':metric.includes('drawdown')?'risk scale: green ≤ 10%, amber ≤ 25%, red > 25% drawdown magnitude':`relative scale: green = ${metric==='annualized_volatility'||metric.includes('turnover')||metric==='trading_cost_drag'?'lower':'higher'}`;
  h=`<table class="matrix"><caption>${escapeHtml(context)}<br>${escapeHtml(selection)} | ${escapeHtml(period)} | ${escapeHtml($('gridMetric').selectedOptions[0]?.textContent)} | ${escapeHtml(scaleLabel)}; hover for actual coverage</caption><tr><th>MOM observations ↓ / Rebalance observations →</th>`+
  j.rebalances.map(rb=>`<th>${rb}D</th>`).join('')+'</tr>';
  for(const lb of j.lookbacks){
@@ -485,6 +578,7 @@ function renderStrategyGrid(){
   h+='</tr>';
  }
  $('gridMatrix').innerHTML=h+'</table>';
+ if(typeof enhanceV4Grid==='function')enhanceV4Grid(j,strategies);
 }
 
 function labelResearchResults(j){
@@ -502,7 +596,7 @@ function labelResearchResults(j){
  addCaption('lookbackTable',`${diagnostic} | Portfolio ${r.selection} | checked MOM ${j.comparison_spans.join(', ')} | returns (%) — hover for sample counts`,j.comparison_counts);
  addCaption('decay',`${diagnostic} | MOM${r.lookback} | Top10/Top20 and Q1–Q5 (Q5 strongest) | returns (%) — hover for sample counts`,j.decay_counts);
  addCaption('top20table',`${r.universe_label} | as of ${j.top20.date} | Top20 by MOM${r.lookback} | score = N-observation return / (sample daily SD × √N); persistence and streak limited to last ${r.lookback} ranking dates; trend = last 10 available observations.`);
- for(const [id,label] of [['lookbackHeat',`${diagnostic} | ${r.selection} | MOM ${j.comparison_spans.join(', ')}`],['heat',`${diagnostic} | MOM${r.lookback} | Top10/Top20, Q1–Q5`],['eq',`${j.portfolio_label} | equity normalized to first post-entry NAV`],['dd',`${j.portfolio_label} | drawdown from running peak (%)`]]){
+ for(const [id,label] of [['lookbackHeat',`${diagnostic} | ${r.selection} | MOM ${j.comparison_spans.join(', ')}`],['heat',`${diagnostic} | MOM${r.lookback} | Top10/Top20, Q1–Q5`],['eq',`${j.portfolio_label} | net equity: initial capital = 1 before estimated initial trading cost`],['dd',`${j.portfolio_label} | net drawdown from running peak including initial capital (%)`]]){
   $(id).alt=label;
   let caption=$(id).parentElement.querySelector(`[data-chart-caption="${id}"]`);
   if(!caption){caption=document.createElement('div');caption.className='small';caption.dataset.chartCaption=id;$(id).after(caption);}
@@ -535,14 +629,14 @@ function renderTop20(t){
  const spans=t.spans||[];
  $('top20date').innerHTML='Signal date: <b>'+(t.date||'—')+'</b> · Primary span: <b>MOM'+t.primary_span+'</b> · Display spans: <b>'+spans.map(s=>'MOM'+s).join(', ')+'</b>';
  let h='<div style="overflow:auto"><table><tr>'+
-   '<th>Rank</th><th>Ticker</th><th>Primary MOM</th><th>Signal Return</th><th>Signal Vol</th>'+
+   '<th>Rank</th><th>Ticker</th><th>Instrument name</th><th>Primary MOM</th><th>Signal Return</th><th>Signal Vol</th>'+
    '<th>Top20 Count</th><th>Persistence</th><th>Streak</th><th>Span Consensus</th>';
  for(const s of spans)h+='<th>MOM'+s+' Score</th><th>MOM'+s+' Rank</th>';
  h+='<th>10-Day Trend</th></tr>';
 
  for(const r of t.rows){
    const pr=x=>x==null?'—':(x*100).toFixed(2)+'%';
-   h+='<tr><td>'+r.rank+'</td><td><b>'+r.ticker+'</b></td>'+
+   h+='<tr><td>'+r.rank+'</td><td><b>'+escapeHtml(r.ticker)+'</b></td><td>'+escapeHtml(r.name||'Name unavailable')+'</td>'+
       '<td>'+(r.momentum_score==null?'—':r.momentum_score.toFixed(3))+'</td>'+
       '<td>'+pr(r.signal_return)+'</td><td>'+pr(r.signal_volatility)+'</td>'+
       '<td><span class="badge">'+r.top20_count+' / '+r.top20_window+'</span></td>'+
@@ -570,6 +664,7 @@ async function changeUniverse(){try{const u=$('researchUniverse').value;const j=
 
 function universeLabel(u){return {CSI300:'CSI 300',CHINEXT_TOP100:'ChiNext Top 100',STAR_TOP100:'STAR Top 100',ETF_250M:'Equity ETF ≥ RMB 250M'}[u]||u}
 function updateUniverseLabels(u){
+ if($('gridUniverse'))$('gridUniverse').value=u;
  const label=universeLabel(u);
  if($('buildTitle'))$('buildTitle').textContent='B. Build '+label+' Data From Ground Up';
  if($('includeLimits')){
@@ -578,7 +673,7 @@ function updateUniverseLabels(u){
  }
  if($('buildOrder')){
    if(u==='CSI300')$('buildOrder').textContent='Order: trading calendar → CSI300 historical weights → member-stock prices → adjustment factors → price limits → adjusted prices.';
-   else if(u==='CHINEXT_TOP100'||u==='STAR_TOP100')$('buildOrder').textContent='Order: trading calendar → month-end point-in-time Top100 market-cap snapshots → eligible stock prices → adjustment factors → price limits → adjusted prices.';
+   else if(u==='CHINEXT_TOP100'||u==='STAR_TOP100')$('buildOrder').textContent='Order: trading calendar → month-end Top100 market-cap snapshots excluding ST/*ST on each snapshot date (stock_st) → eligible stock prices → adjustment factors → price limits → adjusted prices. Historical ST access is required; this monthly filter is not a daily ST-status screen.';
    else $('buildOrder').textContent='Order: trading calendar → historical ETF size snapshots (≥ RMB 250M) → eligible ETF prices → ETF adjustment factors → adjusted prices. ETF size data requires Tushare etf_share_size permission.';
  }
 }
@@ -596,4 +691,13 @@ async function changeDataUniverse(){
 renderFileFields();
 const today=new Date().toISOString().slice(0,10);$('buildEnd').value=today;$('refreshEnd').value=today;loadConfig();pollJob();loadUniverses();
 </script>
+<script src="/ui/pagination.js"></script>
+<script src="/ui/integrity.js?v=20260921-bulk1"></script>
+<script src="/ui/issue-review.js?v=20260921-bulk1"></script>
+<script src="/ui/integrity-workspace.js?v=20260922-workspace1"></script>
+<script src="/ui/strategy-grid.js"></script>
+<script src="/ui/live-portfolio.js"></script>
+<script src="/ui/research-audit.js"></script>
+<script src="/ui/rank-weighting.js"></script>
+<script src="/ui/result-compression.js"></script>
 </body></html>

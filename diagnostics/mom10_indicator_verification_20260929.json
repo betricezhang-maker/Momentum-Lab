@@ -1,0 +1,56 @@
+{
+  "run": "ETF_250M_MOM10_20260928_214542_e342a017",
+  "source_hash_matches": {
+    "adjusted_price_csv": true,
+    "weights_csv": true,
+    "trade_calendar_csv": true
+  },
+  "signal_dates": 137,
+  "first_signal": "2021-01-29",
+  "last_signal": "2026-09-10",
+  "participation_threshold": 0.8,
+  "valid_participation": 137,
+  "valid_top10_average": 137,
+  "valid_median60": 130,
+  "valid_subsequent_net_return": 131,
+  "minimum_coverage": 0.957345971563981,
+  "comparison_failures": [],
+  "max_absolute_difference": {
+    "eligible_count": 0,
+    "valid_mom10_count": 0,
+    "positive_count": 0,
+    "excluded_count": 0,
+    "coverage": 1.1102230246251565e-16,
+    "positive_participation": 1.1102230246251565e-16,
+    "average_top10_mom10": 1.9095836023552692e-14,
+    "valid_return60_count": 0,
+    "excluded_return60_count": 0,
+    "coverage_return60": 1.1102230246251565e-16,
+    "subsequent_net_return": 3.122502256758253e-16,
+    "median_return60": 9.71445146547012e-17
+  },
+  "first": {
+    "signal_date": "2021-01-29",
+    "eligible": 191,
+    "valid": 186,
+    "positive": 44,
+    "coverage": 0.9738219895287958,
+    "participation": 0.23655913978494625,
+    "average_top10_mom10": 0.4575253831234412,
+    "median_return60": null
+  },
+  "latest": {
+    "signal_date": "2026-09-10",
+    "eligible": 758,
+    "valid": 758,
+    "positive": 124,
+    "coverage": 1.0,
+    "participation": 0.16358839050131926,
+    "average_top10_mom10": 2.1286663509534582,
+    "median_return60": -0.06386418755052559
+  },
+  "limitations": [
+    "Historical classification vintages not independently verified; production eligibility snapshots reused.",
+    "Verification reads existing stored adjusted-price history; historical vendor revisions cannot be reconstructed."
+  ]
+}

@@ -1,0 +1,26 @@
+#integrityDashboard {font-size:13px;line-height:1.45}
+#wsSummary {padding:10px 12px;background:#f4f8fd;border:1px solid #dce8f7;border-radius:8px;margin-bottom:10px}
+#wsToolbar {display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+#wsToolbar button,#wsFindings button,#wsPreview button,#wsUploadButton {padding:7px 10px;border:1px solid #cbd6e4;border-radius:7px;background:#f5f8fc;color:#203249;cursor:pointer}
+#wsToolbar button:hover,#wsFindings button:hover,#wsPreview button:hover {background:#e6f0fc}
+#wsToolbar button:disabled,#wsUploadButton:disabled {opacity:.5;cursor:wait}
+#wsOperation {border-left:4px solid #1769d2;background:#eef5ff;padding:10px 12px;margin:12px 0;border-radius:4px;min-height:40px}
+#wsOperation.working::before {content:"";display:inline-block;width:11px;height:11px;border:2px solid #9bc5f5;border-top-color:#1769d2;border-radius:50%;margin-right:8px;vertical-align:middle;animation:wsSpin .7s linear infinite}
+@keyframes wsSpin {to {transform:rotate(360deg)}}
+#wsUpload,#wsFindings {border-top:1px solid #dfe4e9;margin-top:14px;padding-top:8px}
+#wsUpload h4,#wsFindings h4 {margin:4px 0 8px;font-size:14px}
+#wsUpload label {display:inline-block;margin-right:8px}
+#wsUpload input[type=file] {width:min(440px,100%)}
+#wsFilters {display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px 12px;margin:8px 0 12px}
+#wsFilters label {margin:0}
+#wsFilters input[type=checkbox] {width:auto;margin-right:5px}
+.wsGroup {padding:8px 10px;border:1px solid #dfe4e9;border-radius:7px;margin:5px 0;background:#fff}
+.wsGroup summary {cursor:pointer;font-weight:600}
+.wsGroup input[type=checkbox] {width:auto;vertical-align:middle;margin-right:7px}
+.wsGroup table,#wsPreview table {width:100%;border-collapse:collapse;margin:8px 0;table-layout:fixed}
+.wsGroup th,.wsGroup td,#wsPreview th,#wsPreview td {padding:6px;border:1px solid #e2e8f0;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+#wsPreview {max-height:500px;overflow:auto}
+#wsPager {display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:10px 0}
+#wsPager label {display:inline-flex;align-items:center;gap:6px;margin:0}
+#wsPager select,#wsPreview select {width:auto;min-width:76px}
+#integrityDashboard>details {margin-top:10px}

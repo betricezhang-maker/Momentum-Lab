@@ -8,6 +8,9 @@ results/*
 !results/.gitkeep
 logs/*
 !logs/.gitkeep
+live/
+*.sqlite3-wal
+*.sqlite3-shm
 
 # Python caches and local environments
 __pycache__/
@@ -20,7 +23,7 @@ env/
 # Packaging/build artifacts
 build/
 dist/
-*.spec
+# PyInstaller spec files are part of the reproducible source build.
 
 # OS/editor files
 .DS_Store

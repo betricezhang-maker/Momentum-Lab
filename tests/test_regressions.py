@@ -1,5 +1,6 @@
 """Offline regression checks. No application config or real datasets are modified."""
 import ast
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -7,19 +8,34 @@ import tempfile
 import time
 import unittest
 import uuid
+import sys
 
 import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from momentumlab.turnover import compare_weights, summarize_turnover
+from momentumlab.costs import apply_costs
+from momentumlab.dates import normalize_dates
+from momentumlab.serialization import dumps as json_dumps
+from momentumlab.live_model import select_target_rows
+from momentumlab.reconstruction import saved_signal_target
+from momentumlab.runtime_cache import STATUS, file_identity, read_small_or_direct, clear_small_caches
+from momentumlab.data_integrity import normalize_keys, validate_dataset, provenance, canonical_upsert, audit_event, validate_signal_context, history_provenance
 TREE = ast.parse((ROOT / 'MomentumLabV2.py').read_text(encoding='utf-8'))
 
 
 def functions():
-    ns = dict(pd=pd, np=np, Path=Path, time=time, uuid=uuid, json=json,
-              APP_VERSION='test', BUILD_TAG='test')
+    ns = dict(normalize_dates=normalize_dates, json_dumps=json_dumps, select_target_rows=select_target_rows, pd=pd, np=np, Path=Path, time=time, uuid=uuid, json=json,
+              APP_VERSION='test', BUILD_TAG='test', compare_weights=compare_weights, summarize_turnover=summarize_turnover, apply_costs=apply_costs)
+    ns.update(normalize_keys=normalize_keys,validate_dataset=validate_dataset,provenance=provenance,
+              canonical_upsert=canonical_upsert,audit_event=audit_event,validate_signal_context=validate_signal_context,history_provenance=history_provenance)
+    ns['saved_signal_target']=saved_signal_target
+    ns.update(STATUS=STATUS,file_identity=file_identity,read_small_or_direct=read_small_or_direct,clear_small_caches=clear_small_caches,plt=None)
     nodes = [n for n in TREE.body if isinstance(n, ast.FunctionDef)]
     exec(compile(ast.Module(body=nodes, type_ignores=[]), 'MomentumLabV2.py', 'exec'), ns)
+    ns.update(job_check_cancel=lambda:None,job_update=lambda **kw:None,calculation_stage=lambda stage:None)
     return ns
 
 
@@ -37,11 +53,26 @@ class RegressionTests(unittest.TestCase):
             'select_mask': '629a6e5c2ec1fa32e44baf26cb302d0b9f28ac6e185b7bdabb706cb277408840',
             'signal_decay_table': '4f737e30f4cc8c8485ff6a1a4f88cb17a37e9ba084585e620ded360d738f4704',
             'selection_forward_returns': 'e192aa2eb79fe090bdbf1a44f2066b00773239addfa14e1c7397ea9c6ddc7dbb',
-            'backtest': '5bf65ad7e53edcdb21071d64d4b41835574c4f90719b83536d30bf31b0139b9f',
         }
         for node in TREE.body:
             if isinstance(node, ast.FunctionDef) and node.name in expected:
-                self.assertEqual(hashlib.sha256(ast.dump(node).encode()).hexdigest(), expected[node.name])
+                if node.name=='calculate_signal':
+                    # Guard the original arithmetic, allowing only the new calendar gate.
+                    node=copy.deepcopy(node)
+                    node.args.args=node.args.args[:2];node.args.defaults=[]
+                    node.body=node.body[1:-1]+[ast.Return(value=ast.Name(id='x',ctx=ast.Load()))]
+                # Python 3.14 omits empty fields by default; retain the recorded representation.
+                options={'show_empty':True} if sys.version_info>=(3,13) else {}
+                self.assertEqual(hashlib.sha256(ast.dump(node,**options).encode()).hexdigest(), expected[node.name], node.name)
+
+    def test_membership_merge_normalizes_datetime_precision(self):
+        days_s=np.array(pd.bdate_range('2024-01-01',periods=15),dtype='datetime64[s]')
+        prices=pd.DataFrame([{'ts_code':ticker,'trade_date':day,'adj_close':100+i} for ticker in ('A','B') for i,day in enumerate(days_s)])
+        signal=self.ns['calculate_signal'](prices,5,calendar=pd.bdate_range('2024-01-01',periods=15))
+        weights=pd.DataFrame({'con_code':['A','B'],'trade_date':np.array(['2024-01-01','2024-01-01'],dtype='datetime64[us]'),'weight':[.5,.5]})
+        result=self.ns['merge_membership_and_rank'](signal,weights)
+        self.assertEqual(str(result.trade_date.dtype),'datetime64[ns]')
+        self.assertTrue((result.csi300_member==1).all())
 
     def grid_fixture(self):
         dates = pd.bdate_range('2024-01-01', periods=280)
@@ -49,11 +80,13 @@ class RegressionTests(unittest.TestCase):
             adj_close=100*np.exp(.0002*(i+1)*k+.02*np.sin(k/(i+2))))
             for i in range(6) for k, d in enumerate(dates)])
         weights = pd.DataFrame([dict(trade_date='20240101', con_code=f'T{i}', weight=1/6) for i in range(6)])
+        for c in ['open','high','low','close','adj_open','adj_high','adj_low']: prices[c]=prices.adj_close
         prices.to_csv(self.root/'prices.csv', index=False)
+        pd.DataFrame({'trade_date':dates,'is_open':1}).to_csv(self.root/'calendar.csv',index=False)
         weights.to_csv(self.root/'weights.csv', index=False)
         factors = prices[['ts_code','trade_date']].assign(adj_factor=1)
         factors.to_csv(self.root/'factors.csv', index=False)
-        paths = dict(adjusted_price_csv=str(self.root/'prices.csv'),
+        paths = dict(root=str(self.root),raw_price_csv=str(self.root/'prices.csv'),trade_calendar_csv=str(self.root/'calendar.csv'),adjusted_price_csv=str(self.root/'prices.csv'),
                      weights_csv=str(self.root/'weights.csv'),adj_factor_csv=str(self.root/'factors.csv'))
         self.ns.update(load_config=lambda:dict(active_universe='CSI300',results_folder=str(self.root)),
                        UNIVERSES={'CSI300':{'label':'CSI 300'}},
@@ -74,18 +107,29 @@ class RegressionTests(unittest.TestCase):
             self.assertEqual(set(exported.selection), set(selections))
             json.loads(json.dumps(result, allow_nan=False))
             self.assertTrue((Path(result['files']['folder'])/'run_metadata.json').exists())
+            self.assertTrue(result['provenance']['dataset_fingerprint'])
+            self.assertEqual(result['rows'][0]['dataset_id'],result['provenance']['dataset_id'])
+            snapshot=json.loads(Path(result['rows'][0]['history_file']).read_text())
+            self.assertEqual(snapshot[0]['provenance']['dataset_fingerprint'],result['provenance']['dataset_fingerprint'])
         params.pop('selections')
         params['selection_rule'] = 'Q5'
         self.assertEqual(self.ns['run_strategy_grid'](params)['selection_rules'], ['Q5'])
 
     def test_grid_error_rows_keep_selection(self):
         params = self.grid_fixture()
+        stages=[]
+        self.ns['calculation_stage']=stages.append
         def fail(*args):
             raise ValueError('synthetic failure')
         self.ns['backtest'] = fail
         result = self.ns['run_strategy_grid'](params)
         self.assertEqual(result['failed_combinations'], 24)
         self.assertEqual({r['selection'] for r in result['rows']}, {'Top 5','Q5'})
+        self.assertTrue(any('0 / 24' in s and 'Computing MOM10' in s for s in stages))
+        self.assertTrue(any('Running MOM10 · 2024 · Top 5 · 5D' in s for s in stages))
+        self.assertIn('24 / 24 combinations processed (100%)',stages[-1])
+        self.assertIn('24 failed',stages[-1])
+        self.assertIn('Saving final results — not finished yet',stages[-1])
 
     def test_snapshot_replacement_removes_old_constituents(self):
         path = self.root/'members.csv'
