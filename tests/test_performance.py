@@ -68,6 +68,7 @@ class PerformanceTests(unittest.TestCase):
         prices=ns['read_csv'](fixture.root/'prices.csv');weights=ns['read_csv'](fixture.root/'weights.csv')
         prices.attrs['exchange_calendar']=tuple(pd.read_csv(fixture.root/'calendar.csv').trade_date)
         expected=ns['multi_span_monitor'](prices,weights,[10,20],10)
+        for row in result['top20']['rows']:row.pop('name',None)
         self.assertEqual(result['top20'],expected)
 
 

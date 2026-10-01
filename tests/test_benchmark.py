@@ -14,9 +14,8 @@ class BenchmarkTests(unittest.TestCase):
             curves,stats,cov=compare_equity(pd.Series([1,1.05,1.1],index=pd.to_datetime(['2024-01-02','2024-01-03','2024-01-04'])),b)
             self.assertEqual(meta['basis'],'adjusted_etf_return');self.assertAlmostEqual(stats['benchmark']['cumulative_return'],.21)
             self.assertEqual((cov['actual_start'],cov['actual_end']),('2024-01-02','2024-01-04'))
-    def test_missing_benchmark_date_is_dropped_from_comparison_not_filled(self):
+    def test_missing_benchmark_date_raises_rather_than_shortening(self):
         b=pd.Series([100,121],index=pd.to_datetime(['2024-01-02','2024-01-04']))
         s=pd.Series([1,1.1,1.2],index=pd.to_datetime(['2024-01-02','2024-01-03','2024-01-04']))
-        curves,stats,cov=compare_equity(s,b)
-        self.assertEqual(cov['comparison_observations'],2)
-        self.assertEqual(curves.index.strftime('%Y-%m-%d').tolist(),['2024-01-02','2024-01-04'])
+        with self.assertRaisesRegex(ValueError,'Benchmark coverage incomplete'):
+            compare_equity(s,b)

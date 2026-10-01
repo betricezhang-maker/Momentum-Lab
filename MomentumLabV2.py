@@ -2788,10 +2788,20 @@ class Handler(BaseHTTPRequestHandler):
             # Do not queue stale mutations or consume an occupied worker's lock.
             # The request body is unread, so close rather than reuse this connection.
             self.close_connection = True
+            # Drain the unread body first. On Windows, closing a socket that still
+            # holds unread input sends a reset that can destroy this 409 before the
+            # client reads it.
+            try:
+                remaining=min(int(self.headers.get('Content-Length','0')),64*1024*1024)
+                while remaining>0:
+                    chunk=self.rfile.read(min(remaining,65536))
+                    if not chunk:break
+                    remaining-=len(chunk)
+            except (OSError,ValueError):
+                pass
             self.json({'ok':False,'code':'APPLICATION_BUSY','preview_status':'ERROR',
                        'error':'Another operation is active. This request was not started or queued. Wait for it to finish, then retry.'},409)
-            # Send an orderly response EOF even when the client is still uploading.
-            # Closing a Windows socket with unread input can otherwise reset it.
+            # Orderly response EOF even if the drain was partial (huge or stalled body).
             import socket
             self.wfile.flush()
             try:
