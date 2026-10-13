@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
-const elements={integrityDashboard:{innerHTML:''}}, downloaded=[];
+const elements={integrityDashboard:{innerHTML:'',querySelectorAll:()=>[]}}, downloaded=[];
 const context=vm.createContext({$:id=>elements[id],escapeHtml:v=>String(v).replaceAll('&','&amp;').replaceAll('<','&lt;'),
  Blob, URL:{createObjectURL:b=>{downloaded.push(b);return 'blob:test'},revokeObjectURL:()=>{}},
  document:{createElement:()=>({click(){}})},setTimeout:fn=>fn()});

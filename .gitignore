@@ -19,6 +19,7 @@ __pycache__/
 venv/
 env/
 .pytest_cache/
+Python/
 
 # Packaging/build artifacts
 build/

@@ -16,14 +16,32 @@ from .dates import normalize_dates
 from .universe_validation import equity_classification
 from .serialization import dumps
 from .completeness import assess_completeness, evidence_paths, apply_issue_resolutions, finding_signature
-from .integrity_notices import freshness_details, SHANGHAI, PUBLICATION_HOUR
+from .integrity_notices import freshness_details, SHANGHAI
 
 DATA_LOCK=threading.RLock()
 _CACHE={}
 SCHEMA_VERSION='2'
+TAG_VERSION='1'
 
 def clear_integrity_cache():
     with DATA_LOCK:_CACHE.clear()
+
+def _tag_paths(root):
+    root=Path(root)
+    return root/'integrity_check_tag.json',root/'integrity_check_report.json'
+
+def _signature_json(signature):
+    return dumps([list(item) for item in signature],sort_keys=True)
+
+def _params_signature(through,signal_date,execution_date,lookback):
+    # Tags only serve the default research/Strategy-Grid scope; explicit through/lookback validations are separate.
+    return dict(through=str(through),signal_date=str(signal_date),execution_date=str(execution_date),lookback=str(lookback))
+
+def _atomic_write_json(path,payload):
+    temp=path.with_suffix('.'+uuid.uuid4().hex+'.tmp')
+    try:
+        temp.write_text(dumps(payload,indent=1),encoding='utf-8');temp.replace(path)
+    finally: temp.unlink(missing_ok=True)
 
 def consistent_read(function):
     @wraps(function)
@@ -194,37 +212,104 @@ def validate_calendar(frame, through):
 
 
 
-def validate_dataset(paths, through=None, universe_id=None, mode='cached', signal_date=None, execution_date=None, lookback=None):
-    """One read-only financial-data validator; paths come from the portable resolver.
-
-    Only audit records are written. Cache keys include every input's file identity.
-    Optional weight/return fields may be missing; OHLC, factors and keys may not.
-    """
-    universe=universe_id or Path(paths['root']).name
-    specs={
+def _dataset_specs(universe):
+    return {
         'trade_calendar_csv':('calendar',['trade_date'],['is_open']),
         'raw_price_csv':('raw_price',['ts_code','trade_date'],['open','high','low','close']),
         'adjusted_price_csv':('adjusted_price',['ts_code','trade_date'],['adj_open','adj_high','adj_low','adj_close']),
         'weights_csv':('eligibility',['con_code','trade_date'],['market_cap_rmb'] if universe=='ETF_250M' else []),
         'adj_factor_csv':('adjustment_factor',['ts_code','trade_date'],['adj_factor'])}
-    files={k:Path(paths.get(k,Path(paths['root'])/(k+'.csv'))) for k in specs}
+
+def dataset_files(paths, universe):
+    files={k:Path(paths.get(k,Path(paths['root'])/(k+'.csv'))) for k in _dataset_specs(universe)}
     if universe=='ETF_250M': files['classification_csv']=Path(paths.get('classification_csv',Path(paths['root'])/'fund_classification.csv'))
     files.update(evidence_paths(paths))
-    def identity():
-        result=[]
-        for k,p in files.items():
-            try:
-                stat=p.stat();result.append((k,str(p.resolve()),stat.st_mtime_ns,stat.st_size,stat.st_ctime_ns))
-            except OSError: result.append((k,str(p),None))
-        result.append(('publication_pending',(Path(paths['root'])/'.publish_pending.json').exists()))
-        return tuple(result)
+    return files
+
+def dataset_identity(files, root):
+    result=[]
+    for k,p in files.items():
+        try:
+            stat=p.stat();result.append((k,str(p.resolve()),stat.st_mtime_ns,stat.st_size,stat.st_ctime_ns))
+        except OSError: result.append((k,str(p),None))
+    result.append(('publication_pending',(Path(root)/'.publish_pending.json').exists()))
+    return tuple(result)
+
+def _persist_check_tag(root,universe,signature,ack_signature,params,local_now,result):
+    tag_path,report_path=_tag_paths(root)
+    tag=dict(tag_version=TAG_VERSION,universe=universe,checked_at=result['timestamp'],
+             shanghai_date=str(local_now.date()),
+             params=params,file_signature=_signature_json(signature),ack_signature=ack_signature,
+             dataset_fingerprint=result['manifest']['dataset_fingerprint'],dataset_id=result['manifest']['dataset_id'],
+             status=result['status'],research_allowed=result['research_allowed'],
+             errors=len(result['errors']),warnings=len(result['warnings']))
+    _atomic_write_json(tag_path,tag)
+    _atomic_write_json(report_path,result)
+
+def _load_check_tag(root,universe,signature,ack_signature,params,local_now):
+    tag_path,report_path=_tag_paths(root)
+    try:
+        tag=json.loads(tag_path.read_text(encoding='utf-8'))
+        report=json.loads(report_path.read_text(encoding='utf-8'))
+    except (OSError,ValueError): return None
+    fresh=(tag.get('tag_version')==TAG_VERSION and tag.get('universe')==universe
+           and tag.get('shanghai_date')==str(local_now.date())
+           and tag.get('params')==params and tag.get('file_signature')==_signature_json(signature)
+           and tag.get('ack_signature')==ack_signature
+           and report.get('manifest',{}).get('dataset_fingerprint')==tag.get('dataset_fingerprint'))
+    return report if fresh else None
+
+def inspect_check_tag(paths,universe_id=None):
+    """Read-only day-tag status: the recorded pass reused by Research Lab and Strategy Grid."""
+    universe=universe_id or Path(paths['root']).name
+    with DATA_LOCK:
+        tag_path,_=_tag_paths(paths['root'])
+        try: tag=json.loads(tag_path.read_text(encoding='utf-8'))
+        except (OSError,ValueError): return dict(present=False)
+        signature=dataset_identity(dataset_files(paths,universe),paths['root'])
+        ack=hashlib.sha256(_ack_path(paths).read_bytes()).hexdigest() if _ack_path(paths).exists() else None
+        now=datetime.now(SHANGHAI)
+        reasons=[]
+        if tag.get('tag_version')!=TAG_VERSION: reasons.append('tag format is older')
+        if tag.get('universe')!=universe: reasons.append('written for another universe')
+        if tag.get('shanghai_date')!=str(now.date()): reasons.append('checked on '+str(tag.get('shanghai_date'))+', not today')
+        if tag.get('params')!=_params_signature(None,None,None,None): reasons.append('written for a different validation scope')
+        if tag.get('file_signature')!=_signature_json(signature): reasons.append('dataset files changed after the check')
+        if tag.get('ack_signature')!=ack: reasons.append('review decisions changed after the check')
+        info={k:tag.get(k) for k in ('universe','checked_at','shanghai_date','dataset_fingerprint','dataset_id','status','research_allowed','errors','warnings')}
+        info.update(present=True,fresh=not reasons,stale_reasons=reasons,
+                    valid_through=tag.get('shanghai_date'))
+        return info
+
+def validate_dataset(paths, through=None, universe_id=None, mode='cached', signal_date=None, execution_date=None, lookback=None):
+    """One read-only financial-data validator; paths come from the portable resolver.
+
+    Only audit records are written. Cache keys include every input's file identity.
+    Optional weight/return fields may be missing; OHLC, factors and keys may not.
+    A completed full validation persists a day-valid check tag so Research Lab and
+    Strategy Grid reuse the same pass after a restart, until the Shanghai day ends
+    or data and review decisions change.
+    """
+    universe=universe_id or Path(paths['root']).name
+    specs=_dataset_specs(universe)
+    files=dataset_files(paths,universe)
+    root=Path(paths['root'])
+    def identity(): return dataset_identity(files,root)
     with DATA_LOCK:
         signature=identity()
         ack_signature=hashlib.sha256(_ack_path(paths).read_bytes()).hexdigest() if _ack_path(paths).exists() else None
         local_now=datetime.now(SHANGHAI)
-        cache_key=(universe,signature,ack_signature,str(through),str(signal_date),str(execution_date),lookback,str(local_now.date()),local_now.hour>=PUBLICATION_HOUR)
+        params=_params_signature(through,signal_date,execution_date,lookback)
+        cache_key=(universe,signature,ack_signature,str(through),str(signal_date),str(execution_date),lookback,str(local_now.date()))
         if mode!='full' and cache_key in _CACHE:
             cached=copy.deepcopy(_CACHE[cache_key]);cached['cached']=True;return cached
+        if mode!='full':
+            report=_load_check_tag(root,universe,signature,ack_signature,params,local_now)
+            if report is not None:
+                _CACHE[cache_key]=copy.deepcopy(report)
+                report=copy.deepcopy(report);report['cached']=True;report['reused_check_tag']=True
+                audit_event(root,'DATA_VALIDATION_REUSED_CHECK_TAG',universe,checked_at=report.get('timestamp'),dataset_id=report.get('manifest',{}).get('dataset_id'))
+                return report
         if mode=='snapshot':
             raise ValueError('No current validation is cached for this dataset. Click Run integrity check to refresh findings. Browsing does not start a check; research validates the current dataset when requested.')
         root=Path(paths['root']);audit_event(root,'DATA_VALIDATION_STARTED',universe)
@@ -353,8 +438,12 @@ def validate_dataset(paths, through=None, universe_id=None, mode='cached', signa
         result=dict(status=status,structural_status=structural_status,completeness=completeness,universe=universe,timestamp=stamp,checks=checks,manifest=manifest,errors=errors,warnings=warnings,components=components,ok=not errors,
                     research_allowed=not errors,acknowledgements=load_acknowledgements(paths))
         audit_event(root,'DATA_VALIDATION_'+status,universe,dataset_id=manifest['dataset_id'],errors=errors,warnings=warnings)
+        result['check_tag']=dict(checked_at=stamp,shanghai_date=str(local_now.date()),valid_through=str(local_now.date()),
+                                 dataset_fingerprint=fingerprint,dataset_id=manifest['dataset_id'])
         if len(_CACHE)>16: _CACHE.clear()
         _CACHE[cache_key]=copy.deepcopy(result)
+        try:_persist_check_tag(root,universe,signature,ack_signature,params,local_now,result)
+        except OSError:pass
         return result
 
 def repair_duplicate_keys(paths,universe_id):

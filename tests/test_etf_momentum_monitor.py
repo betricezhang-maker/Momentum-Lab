@@ -29,8 +29,13 @@ class ETFMonitorTests(unittest.TestCase):
             scores=self.ranked[self.ranked.trade_date.eq(row.signal_date)].set_index('ts_code').momentum_score
             self.assertAlmostEqual(row.positive_participation,float(scores.gt(0).mean()))
             self.assertAlmostEqual(row.average_top10_mom10,scores.loc[row.selected_tickers.split(',')].mean())
+            self.assertAlmostEqual(row.eligible_mom10_median,float(scores.median()))
+            self.assertAlmostEqual(row.eligible_mom10_min,float(scores.min()))
         assert_series_equal(eq,self.eq);assert_frame_equal(ranked,self.ranked);assert_frame_equal(log,self.log)
         self.assertTrue(result.loc[result.signal_date<self.days[60],'median_return60'].isna().all())
+        cross=result.attrs['mom10_cross_section']
+        self.assertEqual(len(cross),int(result.valid_mom10_count.sum()));self.assertTrue(cross.momentum_score.notna().all())
+        self.assertTrue(result.eligible_mom10_q25.le(result.eligible_mom10_median).all() and result.eligible_mom10_q75.ge(result.eligible_mom10_median).all())
 
     def test_median_and_holding_returns(self):
         result=self.observe();row=result[result.signal_date>=self.days[60]].iloc[0]
@@ -57,12 +62,16 @@ class ETFMonitorTests(unittest.TestCase):
         def check(scores,threshold=.8):
             return self.ns['etf_momentum_observations'](scores,self.ranked,w,self.log,'Top 10',self.prices,participation_min_coverage=threshold)
         exact=check(r);self.assertTrue((exact.coverage==.8).all());self.assertTrue(exact.positive_participation.notna().all())
-        self.assertTrue(check(r,.81).positive_participation.isna().all())
+        self.assertTrue(exact.eligible_mom10_median.notna().all());self.assertEqual(len(exact.attrs['mom10_cross_section']),8*len(exact))
+        gated=check(r,.81);self.assertTrue(gated.positive_participation.isna().all())
+        self.assertTrue(gated.eligible_mom10_median.isna().all());self.assertTrue(gated.attrs['mom10_cross_section'].empty)
         r.loc[r.ts_code.eq('T2'),'momentum_score']=np.nan
         below=check(r);self.assertTrue(below.positive_participation.isna().all());self.assertTrue((below.excluded_count==3).all())
+        self.assertTrue(below.attrs['mom10_cross_section'].empty)
         self.assertTrue(check(r,0).positive_participation.notna().all())
+        self.assertEqual(len(check(r,0).attrs['mom10_cross_section']),7*len(exact))
         r['momentum_score']=np.nan;self.assertTrue(check(r).positive_participation.isna().all())
-        self.assertTrue(check(r,0).positive_participation.isna().all())
+        self.assertTrue(check(r,0).positive_participation.isna().all());self.assertTrue(check(r,0).attrs['mom10_cross_section'].empty)
         for threshold in [-.1,1.1,float('nan')]:
             with self.assertRaises(ValueError):check(r,threshold)
 
@@ -75,8 +84,10 @@ class ETFMonitorTests(unittest.TestCase):
         assert_frame_equal(original[original.signal_date<=cutoff][['median_return60','valid_return60_count']],changed[changed.signal_date<=cutoff][['median_return60','valid_return60_count']])
         early=self.weights.assign(trade_date=self.days[60]);missing=self.observe(w=early)
         self.assertTrue(missing.loc[missing.signal_date<self.days[60],'positive_participation'].isna().all())
+        self.assertTrue(missing.loc[missing.signal_date<self.days[60],'eligible_mom10_median'].isna().all())
+        self.assertEqual(int(missing.attrs['mom10_cross_section'].signal_date.lt(self.days[60]).sum()),0)
 
-    def test_four_axes_share_range_and_net_curve_exact(self):
+    def test_five_axes_share_range_and_net_curve_exact(self):
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
@@ -84,13 +95,34 @@ class ETFMonitorTests(unittest.TestCase):
         self.ns['plt']=plt
         with tempfile.TemporaryDirectory() as folder,patch.object(plt,'close'):
             self.ns['save_etf_momentum_chart'](self.eq,self.observe(),Path(folder)/'chart.png','Synthetic ETF strategy')
-            fig=plt.gcf();self.assertEqual(len(fig.axes),4)
+            fig=plt.gcf();self.assertEqual(len(fig.axes),5)
             self.assertTrue(all(a.get_xlim()==fig.axes[0].get_xlim() for a in fig.axes))
             np.testing.assert_array_equal(fig.axes[0].lines[0].get_ydata(),(self.eq-1)*100)
             self.assertEqual(len(fig.axes[0].lines[0].get_xdata()),len(self.eq))
-            self.assertEqual(len(fig.axes[1].collections[0].get_offsets()),len(self.log))
-            for ax,col,scale in zip(fig.axes[1:],['positive_participation','average_top10_mom10','median_return60'],[100,1,100]):
+            self.assertEqual(len(fig.axes[2].collections[0].get_offsets()),len(self.log))
+            obs=self.observe();cross=obs.attrs['mom10_cross_section']
+            np.testing.assert_allclose(fig.axes[1].lines[0].get_ydata(),pd.to_numeric(obs.eligible_mom10_median,errors='coerce'),equal_nan=True)
+            self.assertEqual(len(fig.axes[1].collections[0].get_offsets()),len(cross))
+            np.testing.assert_allclose(fig.axes[1].collections[0].get_offsets()[:,1],cross.momentum_score.to_numpy())
+            median_series=pd.to_numeric(obs.eligible_mom10_median,errors='coerce')
+            expected_ma=pd.Series(median_series.to_numpy(),index=pd.DatetimeIndex(obs.signal_date)).rolling('30D',min_periods=1).mean()
+            np.testing.assert_allclose(fig.axes[1].lines[1].get_ydata(),expected_ma.to_numpy(),equal_nan=True)
+            self.assertIn('moving average',fig.axes[1].lines[1].get_label())
+            self.assertAlmostEqual(fig.axes[1].collections[1].get_alpha(),.28)
+            for ax,col,scale in zip(fig.axes[2:],['positive_participation','average_top10_mom10','median_return60'],[100,1,100]):
                 np.testing.assert_allclose(ax.lines[0].get_ydata(),pd.to_numeric(self.observe()[col],errors='coerce')*scale,equal_nan=True)
+            import matplotlib.dates as mdates
+            self.assertTrue(all(isinstance(a.xaxis.get_major_locator(),mdates.YearLocator) for a in fig.axes))
+            self.assertTrue(all(isinstance(a.xaxis.get_minor_locator(),mdates.MonthLocator) for a in fig.axes))
+            self.assertGreaterEqual(len(fig.axes[0].xaxis.get_minorticklocs()),4)
+            self.assertEqual(fig.axes[0].xaxis.get_major_formatter().__class__,mdates.DateFormatter)
+            import matplotlib.ticker as mticker
+            minor_fmt=fig.axes[0].xaxis.get_minor_formatter()
+            self.assertIsInstance(minor_fmt,mticker.FuncFormatter)
+            self.assertEqual(minor_fmt(mdates.date2num(pd.Timestamp('2023-02-01')),None),'F')
+            self.assertEqual(minor_fmt(mdates.date2num(pd.Timestamp('2023-07-01')),None),'J')
+            self.assertEqual(minor_fmt(mdates.date2num(pd.Timestamp('2023-12-01')),None),'D')
+            self.assertEqual(minor_fmt(mdates.date2num(pd.Timestamp('2023-01-01')),None),'')
             self.assertTrue((Path(folder)/'chart.png').is_file())
         plt.close('all')
 
@@ -132,6 +164,7 @@ class ETFMonitorTests(unittest.TestCase):
         a=pd.read_csv(Path(standard['files']['folder'])/'equity.csv')
         b=pd.read_csv(Path(report['files']['folder'])/'equity.csv');assert_frame_equal(a,b)
         self.assertTrue(Path(report['etf_momentum_monitor']['csv']).is_file())
+        self.assertTrue(Path(report['etf_momentum_monitor']['cross_csv']).is_file())
 
 
 if __name__=='__main__':unittest.main()

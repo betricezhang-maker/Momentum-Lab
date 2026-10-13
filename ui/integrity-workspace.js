@@ -16,6 +16,19 @@ async function wsLoadBuilds(){
  wsFind('wsBuildCount').textContent=(data.builds||[]).filter(b=>b.status!=='PUBLISHED').length+' retained build(s) for '+universe;
 }
 function wsBuildLabel(){wsFind('wsTargetNotice').textContent=wsBuild()?'RETAINED BUILD — review and repairs affect staged files only. Production remains unchanged until Publish.':'PRODUCTION — review and repair affect the current published dataset.';wsFind('wsPublish').disabled=ws.busy||!wsBuild()}
+async function wsTagLoad(){
+ const el=wsFind('wsCheckTag');if(!el)return;
+ try{
+  const r=await fetch('/api/completeness/check-tag?'+new URLSearchParams({universe:wsUniverse(),build_id:wsBuild()}),{cache:'no-store'});
+  const data=await r.json();if(!data.ok)throw new Error(data.error||'Unavailable');
+  const t=data.tag;
+  if(!t.present){el.innerHTML='<span class="small">No check tag for this dataset yet. Run integrity check to create the day-valid pass that Research Lab and Strategy Grid reuse.</span>';return}
+  const checked=t.checked_at?new Date(t.checked_at).toLocaleString():'—';
+  const dataset=wsEsc(String(t.dataset_id||t.dataset_fingerprint||''));
+  if(t.fresh)el.innerHTML='<span class="small"><strong>Check tag '+wsEsc(t.status||'')+'</strong> · research '+(t.research_allowed?'allowed':'blocked')+' · checked '+wsEsc(checked)+' · valid through '+wsEsc(t.valid_through||'')+' (until midnight Asia/Shanghai, at most 24 hours after the check; any dataset/review change ends validity) · dataset '+dataset+' · reused as the integrity pass for Research Lab and Strategy Grid.</span>';
+  else el.innerHTML='<span class="small warn"><strong>Check tag stale</strong> — '+t.stale_reasons.map(wsEsc).join('; ')+' · checked '+wsEsc(checked)+' · the next Research Lab or Strategy Grid run revalidates and writes a new tag.</span>';
+ }catch(e){el.innerHTML='<span class="small">Check tag unavailable: '+wsEsc(e.message)+'</span>'}
+}
 async function wsRefreshBuilds(){
  const button=wsFind('wsBuildRefresh');if(ws.busy||button.disabled)return;
  button.disabled=true;button.textContent='Refreshing retained builds…';
@@ -24,7 +37,7 @@ async function wsRefreshBuilds(){
  catch(e){wsFind('wsBuildCount').textContent='Could not refresh retained builds: '+e.message}
  finally{button.disabled=ws.busy;button.textContent='Refresh retained builds'}
 }
-async function wsChangeBuild(){ws.page=1;ws.selected.clear();ws.preview=null;wsFind('wsPreview').innerHTML='';sessionStorage.removeItem('momentumIntegrityPreview');wsBuildLabel();await wsCheck()}
+async function wsChangeBuild(){ws.page=1;ws.selected.clear();ws.preview=null;wsFind('wsPreview').innerHTML='';sessionStorage.removeItem('momentumIntegrityPreview');wsBuildLabel();wsTagLoad();await wsCheck()}
 function wsPublish(){
  if(ws.busy){wsFind('wsTargetNotice').textContent='Publication has not started: wait for the current integrity operation to finish.';return}
  if(!wsBuild()){wsFind('wsTargetNotice').textContent='Publication has not started: select an AWAITING_REVIEW retained build in Review dataset first.';return}
@@ -50,7 +63,7 @@ function wsInit(){
  const card=host.closest('.card');card.classList.add('wide');card.style.width='100%';
  const dataset=wsFind('dataUniverse')?.closest('.card');if(dataset)dataset.insertAdjacentElement('afterend',card);
  const previous=card.querySelector('button[onclick="runIntegrityCheck()"]');if(previous)previous.remove();
- host.style.overflow='visible';host.innerHTML='<div><label>Review dataset <select id="wsBuild"><option value="">Production dataset</option></select></label> <button id="wsBuildRefresh">Refresh retained builds</button> <span id="wsBuildCount" role="status"></span> <button id="wsPublish" disabled>Revalidate &amp; publish retained build</button><p id="wsTargetNotice"></p></div><div id="wsSummary">Run an integrity check to inspect this dataset.</div>'+
+ host.style.overflow='visible';host.innerHTML='<div><label>Review dataset <select id="wsBuild"><option value="">Production dataset</option></select></label> <button id="wsBuildRefresh">Refresh retained builds</button> <span id="wsBuildCount" role="status"></span> <button id="wsPublish" disabled>Revalidate &amp; publish retained build</button><p id="wsTargetNotice"></p></div><div id="wsCheckTag" role="status"></div><div id="wsSummary">Run an integrity check to inspect this dataset.</div>'+
  '<div id="wsToolbar"><button id="wsCheck">Run integrity check</button> <button id="wsExportPage">Export current page</button> <button id="wsExportFiltered">Export all filtered results</button> <button id="wsExportAll">Export all findings</button> <button id="wsRepair">Repair selected</button> <span id="wsSelectedCount" role="status">0 findings selected</span> <button id="wsRepairAll">Repair all eligible</button> <button id="wsDuplicates">Remove identical duplicates</button></div>'+
  '<div id="wsPublishReview" role="region" aria-label="Publication confirmation"></div><div id="wsOperation" role="status" aria-live="polite">No integrity operation running.</div>'+
  '<section id="wsUpload"><h4>Bulk review</h4><label>Choose reviewed workbook <input id="wsFile" type="file" accept=".xlsx"></label><button id="wsUploadButton">Upload and validate</button><div id="wsPreview"></div></section>'+
@@ -61,8 +74,8 @@ function wsInit(){
  wsFind('wsRepair').onclick=()=>wsRepair(false);wsFind('wsRepairAll').onclick=()=>wsRepair(true);
  wsFind('wsDuplicates').onclick=()=>wsDuplicate();wsFind('wsUploadButton').onclick=()=>wsUpload();
  wsFind('wsBuild').onchange=wsChangeBuild;wsFind('wsPublish').onclick=wsPublish;wsFind('wsBuildRefresh').onclick=wsRefreshBuilds;
- wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));
- wsFind('dataUniverse')?.addEventListener('change',()=>{wsFind('wsBuild').value='';wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));ws.page=1;ws.selected.clear();ws.preview=null;wsFind('wsPreview').innerHTML='';wsLoadPage()});
+ wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));wsTagLoad();
+ wsFind('dataUniverse')?.addEventListener('change',()=>{wsFind('wsBuild').value='';wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));ws.page=1;ws.selected.clear();ws.preview=null;wsFind('wsPreview').innerHTML='';wsTagLoad();wsLoadPage()});
  wsFind('wsFilters').innerHTML='<label>Status <select data-key="status"><option value="">All</option><option>UNRESOLVED</option><option>CONFIRMED</option><option>REVIEW_REQUIRED</option></select></label> '+
  '<label>Ticker <input data-key="ticker"></label> <label>Component <input data-key="component"></label> '+
  '<label>Classification <input data-key="classification"></label> <label>Review group <input data-key="group"></label> '+
@@ -176,7 +189,7 @@ async function wsRepair(all){if(ws.busy){wsMessage('Repair','WAITING','Another i
  try{const r=await wsPost('/api/completeness/repair-batch',{universe:wsUniverse(),issue_ids:[...ws.selected],all_eligible:all});wsWatch(r.job)}
  catch(e){wsBusy(false);wsMessage('Repair','FAILED',e.message)}}
 async function wsDuplicate(){if(ws.busy)return;ws.started=Date.now();wsBusy(true);wsMessage('Duplicate removal','RUNNING','Checking duplicate keys and staging changes.');
- try{await wsPost('/api/repair-safe',{universe:wsUniverse()});await wsLoadPage();wsMessage('Duplicate removal','COMPLETED','Identical duplicates removed; report refreshed.')}
+ try{await wsPost('/api/repair-safe',{universe:wsUniverse()});await wsLoadPage();wsTagLoad();wsMessage('Duplicate removal','COMPLETED','Identical duplicates removed; report refreshed.')}
  catch(e){wsMessage('Duplicate removal','FAILED',e.message)}finally{wsBusy(false)}}
 function wsWatch(initial){if(initial.metadata?.universe&&(initial.metadata.universe!==wsUniverse()||(initial.metadata.build_id||'')!==wsBuild())){wsMessage('Integrity','OTHER_DATASET','An operation belongs to another dataset. Select its universe and retained build to follow it.');return}ws.job=initial;ws.started=Date.parse(initial.started_at)||Date.now();wsBusy(true);
  if(ws.timer)clearTimeout(ws.timer);
@@ -185,6 +198,7 @@ function wsWatch(initial){if(initial.metadata?.universe&&(initial.metadata.unive
   wsMessage(job.kind||'Integrity',job.stage||job.status,job.message||'Working…',job);
   if(job.status==='running'){ws.timer=setTimeout(poll,700);return}
   wsBusy(false);if(job.status==='failed')throw new Error(job.error||'Operation failed.');
+  wsTagLoad();
   if(job.kind==='export'){const r=job.result;const link=document.createElement('a');link.href='/api/completeness/workbook?'+new URLSearchParams({universe:wsUniverse(),build_id:wsBuild(),id:r.export_id});link.download=r.filename;link.click();
    wsMessage('Export','DOWNLOAD_READY','Workbook prepared: '+r.groups+' review groups / '+r.findings+' findings. Browser download requested.',job)}
   else if(job.kind==='review upload'){
@@ -211,6 +225,6 @@ async function wsResume(){try{const saved=JSON.parse(sessionStorage.getItem('mom
 // Only explicit check controls start the background full-validation job.
 // checkIntegrity(universe, mode) retains its report-returning API contract.
 runIntegrityCheck=wsCheck;revalidateCompleteness=wsCheck;
-renderIntegrity=()=>wsLoadPage();
+renderIntegrity=()=>{wsLoadPage();wsTagLoad()};
 document.addEventListener('DOMContentLoaded',wsInit);
 if(document.readyState!=='loading')wsInit();

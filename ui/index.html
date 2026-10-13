@@ -103,6 +103,18 @@ button.danger{background:#b42318;color:white}
 <div class="small" style="margin-top:8px"><span id="refreshHelp">V3.1 inspects only the selected dataset, requests the missing period, and refreshes membership/eligibility with overlap.</span></div>
 <div id="refreshMsg" class="small" style="margin-top:10px"></div>
 </div>
+<div class="card"><h3>D. Benchmark Index Data (CSI 300 / CSI 500, price and total return)</h3>
+<p class="small">Downloads index close prices for benchmark comparison in Research Lab and Strategy Grid. One CSV per index under <span id="benchmarkFolder">data/benchmarks</span>. “Total Return” indexes (H00300.CSI / H00905.CSI) reinvest dividends, so they track a buy-and-hold investor's actual return; the plain CSI 300 / CSI 500 indexes are price-only. Leave “From date” empty to update incrementally from local coverage (first build starts 2005-01-01), or set a From–To window to (re)fetch a specific range; overlapping dates are refreshed in place. Jobs share the background worker, progress panel and API throttle above; benchmarks are independent of the selected dataset.</p>
+<div id="benchmarkStatusRows"></div>
+<div class="row" style="margin-top:12px">
+<div><label>From date (optional)</label><input id="benchmarkStart" type="date"></div>
+<div><label>To date</label><input id="benchmarkEnd" type="date"></div>
+<span id="benchmarkChkRow" class="row" style="align-items:flex-end"></span>
+<button class="primary" id="benchmarkBuildBtn" onclick="benchmarkBuild()">BUILD / UPDATE BENCHMARKS</button>
+</div>
+<div id="benchmarkMsg" class="small" style="margin-top:10px">Build or update the indexes here, then use “Set as active benchmark” to point Research Lab and Strategy Grid at one. Clear it to compare against nothing again.</div>
+<div id="benchmarkError" class="bad" role="alert" style="white-space:pre-wrap"></div>
+</div>
 <div class="card"><h3>Compress older run results</h3><p class="small">Lossless Windows NTFS compression of completed research and Strategy Grid runs. Files keep their original paths and remain readable. No results are deleted; datasets, portfolios and backups are not included. Reduces size on disk, not logical file size.</p><div class="row"><div><label for="compressionDays">No file changed in the last N days</label><input id="compressionDays" type="number" min="1" max="36500" value="30" onchange="resultCompressionToken=null;$('compressionApply').disabled=true"></div><button id="compressionPreview" onclick="previewResultCompression()">Preview older runs</button><button id="compressionApply" onclick="compressOlderResults()" disabled>Compress previewed runs</button><button onclick="watchResultCompression()">Refresh compression status</button></div><p id="compressionStatus" role="status" aria-live="polite">Choose an age and preview first. Compression is optional.</p><details><summary>Previewed runs</summary><pre id="compressionList" style="max-height:220px;overflow:auto;white-space:pre-wrap"></pre></details></div>
 </section>
 
@@ -186,9 +198,10 @@ button.danger{background:#b42318;color:white}
 <div class="card"><h3>Momentum Lookback × Forward Return</h3><div class="small">Rows are the checked MOM lookbacks. Columns are future trading-day returns. Each cell is the average forward return of the selected portfolio in this universe.</div><img id="lookbackHeat" class="chart"><div id="lookbackTable" style="margin-top:10px"></div></div>
 <div class="grid2"><div class="card"><h3>Primary MOM Rank / Signal Decay</h3><div class="small">Uses only the Primary / Backtest span and checks whether stronger ranks actually separate from weaker ranks.</div><img id="heat" class="chart"></div><div class="card"><h3>Equity Curve</h3><img id="eq" class="chart"></div></div>
 <div class="card"><h3>Drawdown</h3><img id="dd" class="chart"></div>
+<div class="card" id="sectorPanel" style="display:none"><h3>Sector Allocation</h3><img id="sectorChart" class="chart"><div id="sectorCaption" class="small"></div></div>
 <div class="card"><h3>Primary MOM Signal Decay Table</h3><div id="decay"></div></div>
 <div class="card"><h3>Latest Top 20 + Multi-Span Momentum Monitor</h3><div id="top20date" class="small"></div><div id="top20table"></div></div>
-<div class="card" id="etfMomentumPanel" style="display:none"><h3>ETF Momentum Conditions · Selected Strategy</h3><p id="etfMomentumInfo" class="small"></p><div id="etfVisualizationControls" hidden><label><input type="checkbox" id="etfMedianOverlay" onchange="updateETFVisualization()" style="width:auto"> Five-rebalance trailing median (restarts after gaps)</label><label><input type="checkbox" id="etfReturnColors" onchange="updateETFVisualization()" style="width:auto"> Color markers by subsequent realized net return (retrospective)</label><p class="small">Green: positive · Red: negative · Grey: zero or unavailable. Static charts have no hover; exact values are in the CSV.</p></div><img id="etfMomentumChart" class="chart" alt="Four aligned panels: unchanged daily net cumulative return, positive MOM10 participation, selected Top10 MOM10, median eligible ETF 60-session return"><div id="etfMomentumEvidence"></div></div>
+<div class="card" id="etfMomentumPanel" style="display:none"><h3>ETF Momentum Conditions · Selected Strategy</h3><p id="etfMomentumInfo" class="small"></p><div id="etfVisualizationControls" hidden><label><input type="checkbox" id="etfMedianOverlay" onchange="updateETFVisualization()" style="width:auto"> Five-rebalance trailing median (restarts after gaps)</label><label><input type="checkbox" id="etfReturnColors" onchange="updateETFVisualization()" style="width:auto"> Color markers by subsequent realized net return (retrospective)</label><p class="small">Green: positive · Red: negative · Grey: zero or unavailable. Static charts have no hover; exact values are in the CSV.</p></div><img id="etfMomentumChart" class="chart" alt="Five aligned panels: unchanged daily net cumulative return, eligible MOM10 cross-section, positive MOM10 participation, selected Top10 MOM10, median eligible ETF 60-session return"><div id="etfMomentumEvidence"></div></div>
 <div class="card" id="rankWeightingResults" hidden></div>
 <div class="card"><h3>Past 10 Trading-Observation Price Trends</h3><div id="trendCharts" class="grid2"></div></div>
 <div class="card"><h3>Saved Results</h3><div id="saved" class="small"></div></div>
@@ -247,7 +260,7 @@ function renderFileFields(){
    <input id="upload_${id}" type="file" accept=".csv,text/csv" style="display:none" onchange="importCsv('${id}',this)">
  </div>`).join('');
 }
-async function loadConfig(){const c=await api('/api/config');Object.keys(c).forEach(k=>{if($(k))$(k).value=c[k]??''});if($('dataUniverse'))$('dataUniverse').value=c.active_universe||'CSI300';if($('researchUniverse'))$('researchUniverse').value=c.active_universe||'CSI300';updateUniverseLabels(c.active_universe||'CSI300');if(typeof wsLoadBuilds==='function'&&$('wsBuild'))wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));loadStatus()}
+async function loadConfig(){const c=await api('/api/config');Object.keys(c).forEach(k=>{if($(k))$(k).value=c[k]??''});if($('dataUniverse'))$('dataUniverse').value=c.active_universe||'CSI300';if($('researchUniverse'))$('researchUniverse').value=c.active_universe||'CSI300';updateUniverseLabels(c.active_universe||'CSI300');if(typeof wsLoadBuilds==='function'&&$('wsBuild'))wsLoadBuilds().catch(e=>wsMessage('Retained builds','FAILED',e.message));if(typeof wsTagLoad==='function')wsTagLoad();loadStatus()}
 async function saveSettings(){const c={};['data_folder','results_folder','tushare_token','proxy_url','api_requests_per_minute','api_cooldown_seconds','benchmark_csv','benchmark_ticker','benchmark_name','benchmark_basis'].forEach(k=>c[k]=$(k).value);await api('/api/config',c);$('apiMsg').innerHTML='<span class="ok">Saved.</span>'}
 async function saveFiles(){const c={};fileDefs.forEach(([id])=>c[id]=$(id).value);await api('/api/config',c);$('validateMsg').innerHTML='<span class="ok">File locations saved.</span>';loadStatus()}
 async function browseFile(id,title){
@@ -277,7 +290,7 @@ async function importCsv(id,input){
 }
 async function browseFolder(id){const j=await api('/api/browse-folder',{initial:$(id).value});if(j.path)$(id).value=j.path}
 async function testApi(){busy(true,'Testing Tushare...');try{await saveSettings();const j=await api('/api/test-tushare',{});$('apiMsg').innerHTML='<span class="ok">'+j.message+' Rows: '+j.rows+'</span>'}catch(e){$('apiMsg').innerHTML='<span class="bad">'+e.message+'</span>'}finally{busy(false)}}
-async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).filter(([k])=>names[k]).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('')}
+async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).filter(([k])=>names[k]).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('');loadBenchmarks()}
 async function validateFiles(){try{await checkIntegrity($('researchUniverse').value)}catch(e){$('validateMsg').textContent=e.message}}
 async function fullBuild(){
  $('dataRequestError').textContent='';
@@ -312,6 +325,52 @@ async function resumeJob(){
    renderJob(j.job);
  }catch(e){$('buildMsg').innerHTML='<span class="bad">'+e.message+'</span>'}
 }
+let benchmarkMeta=null;
+async function loadBenchmarks(){
+ try{
+  const j=await api('/api/benchmark-status');
+  benchmarkMeta=j.benchmarks;
+  if($('benchmarkFolder'))$('benchmarkFolder').textContent=j.benchmarks.folder;
+  const prev={};if($('benchmarkChkRow'))$('benchmarkChkRow').querySelectorAll('input[data-bench]').forEach(x=>prev[x.dataset.bench]=x.checked);
+  if($('benchmarkChkRow'))$('benchmarkChkRow').innerHTML=Object.entries(j.benchmarks.indexes).map(([k,b])=>
+   '<label><input data-bench="'+k+'" type="checkbox" '+((k in prev)?(prev[k]?'checked':''):'checked')+' style="width:auto"> '+escapeHtml(b.name)+' ('+b.ts_code+')</label>').join('');
+  $('benchmarkStatusRows').innerHTML=Object.entries(j.benchmarks.indexes).map(([k,b])=>{
+   const cov=b.exists?('✓ '+b.rows.toLocaleString()+' rows · '+b.start+' → '+b.end):'Not built';
+   const action=b.is_active
+     ?'<span class="ok">Active benchmark</span> <button class="secondary" onclick="clearActiveBenchmark()">Clear</button>'
+     :'<button class="secondary" '+(b.exists?'':'disabled')+' onclick="setActiveBenchmark(\''+k+'\')">Set as active benchmark</button>';
+   return '<div class="row" style="align-items:center;margin-top:8px"><div style="min-width:160px"><b>'+escapeHtml(b.name)+'</b> <span class="small">'+b.ts_code+'</span></div><div class="'+(b.exists?'ok':'warn')+'" style="flex:1">'+cov+'</div>'+action+'</div>';
+  }).join('');
+ }catch(e){if($('benchmarkError'))$('benchmarkError').textContent='Cannot read benchmark status: '+e.message}
+}
+async function setActiveBenchmark(key){
+ const b=benchmarkMeta&&benchmarkMeta.indexes&&benchmarkMeta.indexes[key];if(!b)return;
+ $('benchmarkError').textContent='';
+ try{
+  await api('/api/config',{benchmark_csv:b.path,benchmark_ticker:b.ts_code,benchmark_name:b.name,benchmark_basis:key.endsWith('_TR')?'total_return':(($('benchmark_basis')&&$('benchmark_basis').value)||'price_return')});
+  $('benchmarkMsg').innerHTML='<span class="ok">'+escapeHtml(b.name)+' is now the configured benchmark. Research Lab and Strategy Grid use it when their benchmark selector is set to “Configured benchmark”.</span>';
+  loadBenchmarks();
+ }catch(e){$('benchmarkError').textContent='Could not set active benchmark: '+e.message}
+}
+async function clearActiveBenchmark(){
+ $('benchmarkError').textContent='';
+ try{
+  await api('/api/config',{benchmark_csv:'',benchmark_ticker:'',benchmark_name:''});
+  $('benchmarkMsg').innerHTML='<span class="warn">Active benchmark cleared. Comparisons revert to “No benchmark” unless a benchmark is selected again.</span>';
+  loadBenchmarks();
+ }catch(e){$('benchmarkError').textContent='Could not clear active benchmark: '+e.message}
+}
+async function benchmarkBuild(){
+ if(!$('benchmarkError'))return;
+ $('benchmarkError').textContent='';
+ const chosen=[...document.querySelectorAll('#benchmarkChkRow input[data-bench]:checked')].map(x=>x.dataset.bench);
+ if(!chosen.length){$('benchmarkError').textContent='Select at least one index to build or update.';return}
+ try{
+  const j=await api('/api/benchmark-build',{benchmarks:chosen,start_date:$('benchmarkStart').value||null,end_date:$('benchmarkEnd').value||null});
+  $('benchmarkMsg').innerHTML='<span class="ok">Background benchmark job started for '+chosen.join(' + ')+'. Progress is shown in the job panel above.</span>';
+  renderJob(j.job);
+ }catch(e){$('benchmarkError').textContent='Benchmark job did not start: '+e.message}
+}
 function fmtTime(sec){
  sec=Math.max(0,Math.floor(sec||0));const m=Math.floor(sec/60),s=sec%60;
  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')
@@ -326,6 +385,7 @@ function renderJob(j){
 
  setDis('buildBtn',active);
  setDis('updateBtn',active);
+ setDis('benchmarkBuildBtn',active);
  setDis('cancelBtn',!active);
  setDis('updateCancelBtn',!active);
  setDis('resumeBtn',active || !j.can_resume);
@@ -348,8 +408,15 @@ function renderJob(j){
 
  if(j.status==='completed' && lastCompletedJob!==j.started_at){
    lastCompletedJob=j.started_at;
-   setHtml('buildMsg','<span class="ok">✓ Data job completed.</span>');
-   if(j.result?.integrity){renderIntegrity(j.result.integrity);setHtml('buildMsg','FINAL DATASET: '+escapeHtml(j.result.integrity.status));}
+   if(j.kind==='benchmark'){
+     setHtml('buildMsg','<span class="ok">✓ Benchmark data job completed.</span>');
+     loadBenchmarks();
+     const rows=(j.result&&j.result.benchmarks||[]).map(x=>x.index+': '+Number(x.rows).toLocaleString()+' rows through '+x.end+(x.status==='PASS'?' (updated)':' (already current)')).join(' · ');
+     if(rows)$('benchmarkMsg').innerHTML='<span class="ok">'+escapeHtml(rows)+'</span>';
+   }else{
+     setHtml('buildMsg','<span class="ok">✓ Data job completed.</span>');
+     if(j.result?.integrity){renderIntegrity(j.result.integrity);setHtml('buildMsg','FINAL DATASET: '+escapeHtml(j.result.integrity.status));}
+   }
    loadConfig();
  }
  if(j.status==='cancelled'){
@@ -421,6 +488,12 @@ async function runResearch(){
    $('coverage').innerHTML='Dataset: <b>'+(r.universe_label||universeLabel(u))+'</b> · Available: <b>'+j.usable_start+' → '+j.usable_end+'</b> · Requested: <b>'+reqRange+'</b> · Backtest actually used: <b>'+j.backtest_start+' → '+j.backtest_end+'</b> · observations: <b>'+j.stats.observations+'</b> · snapshots: <b>'+j.snapshots+'</b>'+ (j.benchmark?.ticker?'<br>Benchmark: <b>'+escapeHtml(j.benchmark.name)+' ('+escapeHtml(j.benchmark.ticker)+')</b> · basis: '+escapeHtml(j.benchmark.basis_label)+' · '+escapeHtml(j.benchmark.coverage?.actual_start||'')+' → '+escapeHtml(j.benchmark.coverage?.actual_end||''):'');
    $('lookbackHeat').src=fileUrl(j.files.lookback_heatmap);$('heat').src=fileUrl(j.files.heatmap);$('eq').src=fileUrl(j.files.equity);$('dd').src=fileUrl(j.files.drawdown);
    if(j.benchmark?.chart){let b=document.getElementById('benchmarkChart');if(!b){b=document.createElement('img');b.id='benchmarkChart';b.className='chart';document.getElementById('researchOut').appendChild(b)}b.src=fileUrl(j.benchmark.chart)}
+   const sv=j.sector_allocation;
+   if(sv?.status==='available'&&sv.chart){
+     $('sectorPanel').style.display='block';
+     $('sectorChart').src=fileUrl(sv.chart);
+     $('sectorCaption').innerHTML=escapeHtml(sv.note||'')+(sv.latest?.length?'<details style="margin-top:4px"><summary>Latest rebalance: '+sv.latest.length+' holdings → sector mapping</summary><div class="table-scroll"><table><tr><th>Ticker</th><th>Name</th><th>Sector</th><th>Weight</th></tr>'+sv.latest.map(x=>'<tr><td>'+escapeHtml(x.ticker)+'</td><td>'+escapeHtml(x.name)+'</td><td>'+escapeHtml(x.sector)+'</td><td>'+pct(x.weight)+'</td></tr>').join('')+'</table></div></details>':'');
+   }else $('sectorPanel').style.display='none';
    const lbgs=Object.keys(j.lookback_comparison||{});
    if(lbgs.length){const lbcs=Object.keys(j.lookback_comparison[lbgs[0]]);let lh='<table><tr><th>Lookback</th>'+lbcs.map(c=>'<th>'+c+'</th>').join('')+'</tr>';for(const g of lbgs)lh+='<tr><td><b>'+g+'</b></td>'+lbcs.map(c=>'<td>'+(j.lookback_comparison[g][c]==null?'—':(j.lookback_comparison[g][c]*100).toFixed(2)+'%')+'</td>').join('')+'</tr>';lh+='</table>';$('lookbackTable').innerHTML=lh;}
    const gs=Object.keys(j.decay),cs=Object.keys(j.decay[gs[0]]);let h='<table><tr><th>Group</th>'+cs.map(c=>'<th>+'+c+'</th>').join('')+'</tr>';for(const g of gs)h+='<tr><td>'+g+'</td>'+cs.map(c=>'<td>'+(j.decay[g][c]==null?'—':(j.decay[g][c]*100).toFixed(2)+'%')+'</td>').join('')+'</tr>';h+='</table>';$('decay').innerHTML=h;
@@ -434,7 +507,7 @@ async function runResearch(){
    $('etfMedianOverlay').checked=false;$('etfReturnColors').checked=false;
    if(em?.status==='available'){
      $('etfMomentumChart').src=fileUrl(em.chart);
-     $('etfMomentumEvidence').innerHTML='<a download href="'+escapeHtml(fileUrl(em.csv))+'">Download indicator data and coverage (CSV)</a>';
+     $('etfMomentumEvidence').innerHTML='<a download href="'+escapeHtml(fileUrl(em.csv))+'">Download indicator data and coverage (CSV)</a>'+(em.cross_csv?' · <a download href="'+escapeHtml(fileUrl(em.cross_csv))+'">Download eligible MOM10 cross-section values (CSV)</a>':'');
    }
    labelResearchResults(j);
    if(typeof renderV4Research==='function')renderV4Research(j);
@@ -551,6 +624,8 @@ function renderStrategyGrid(){
   if(ratio(a)!==ratio(b))return ratio(a)>ratio(b)?-1:1;
   return (b.avg??-Infinity)-(a.avg??-Infinity);
  });
+ const benchName=j.benchmark&&j.benchmark.name?j.benchmark.name:'benchmark';
+ const hasBench=j.rows.some(r=>number(r.benchmark_return));
  let h=`<div class="gridlegend"><span>Annual returns: −${(annualLimit*100).toFixed(2)}% <span class="returnscale" aria-hidden="true"></span> +${(annualLimit*100).toFixed(2)}% · center 0%; shared scale across all annual cells</span><span>Positive years: <b>High ≥ ⅔</b> · Mixed ≥ ½ · Low &lt; ½ · gray = limited coverage</span><span>Drawdown magnitude: green ≤ 10% · amber ≤ 25% · red &gt; 25%</span></div><details class="scoreguide"><summary>Quality score / 100 — display-only heuristic</summary><p>50% × positive / requested years + 25% × clamp(full CAGR / annualized volatility ÷ 2) + 25% × clamp(1 − |full max drawdown| ÷ 50%), multiplied by 100 and rounded. Clamp limits each component to 0–1. At least two valid years, complete requested-year coverage and full-period metrics are required; otherwise “—”. Partial years count as years. This is a descriptive comparison, not a probability, statistical confidence or investment recommendation. Scores do not change row ordering, backtests, CSVs or API data.</p></details><table class="robust"><caption>${escapeHtml(context)}<br>Independent calendar-year returns (%); hover cells for actual dates and observations. Partial years are included. Average/worst/best use successful years only.</caption><tr><th>Fixed Strategy / Portfolio</th>`+
  years.map(y=>`<th>${y}${y===j.dataset_start.slice(0,4)||y===j.dataset_end.slice(0,4)?' (check coverage)':''}</th>`).join('')+
  '<th>Positive / Requested Years</th><th>Valid Years</th><th>Avg Year</th><th>Worst Year</th><th>Best Year</th><th>Full Return</th><th>Full CAGR / Ann. Vol</th><th>Full Max DD</th><th title="Display-only heuristic; expand the formula above. Requires at least two valid years and full-period metrics.">Quality / 100</th></tr>';
@@ -561,6 +636,20 @@ function renderStrategyGrid(){
   const quality=strategyQuality(s,years.length);
   h+=cell(s.full,'total_return')+cell(s.full,'sharpe_rf0')+cell(s.full,'max_drawdown');
   h+=quality==null?'<td title="Unavailable: requires at least two valid years, complete requested-year coverage and full-period metrics.">—</td></tr>':`<td><span class="qualitybadge" style="background:#edf3fb;color:#244c78" title="Display-only weighted consistency, CAGR/volatility and drawdown; see formula above.">${quality} / 100</span></td></tr>`;
+ }
+ if(hasBench){
+  const bv=y=>{const r=j.rows.find(x=>x.period===y&&number(x.benchmark_return));return r?r.benchmark_return:null};
+  const bvals=years.map(bv).filter(number);
+  const bf=j.rows.find(r=>r.period==='Full Period'&&number(r.benchmark_return));
+  const bavg=bvals.length?bvals.reduce((a,b)=>a+b,0)/bvals.length:null;
+  h+=`<tr class="benchrow"><td style="font-weight:600" title="${escapeHtml(benchName)} buy-and-hold, 0 bps; identical across strategies.">${escapeHtml(benchName)}</td>`;
+  h+=years.map(y=>{const v=bv(y);return `<td title="${escapeHtml(benchName)} buy-and-hold (0 bps) · ${y}" style="${number(v)?returnStyle(v,annualLimit):''}">${gridMetricText('total_return',v)}</td>`}).join('');
+  h+=`<td>${consistencyPill(bvals.filter(v=>v>0).length,years.length,bvals.length)}</td><td>${bvals.length}/${years.length}</td>`;
+  h+=[bavg,bvals.length?Math.min(...bvals):null,bvals.length?Math.max(...bvals):null].map(v=>`<td>${gridMetricText('total_return',v)}</td>`).join('');
+  h+=`<td title="${escapeHtml(benchName)} buy-and-hold (0 bps) · full period" style="${number(bf?.benchmark_return)?returnStyle(bf.benchmark_return,annualLimit):''}">${gridMetricText('total_return',bf?.benchmark_return)}</td>`;
+  h+=`<td title="${escapeHtml(benchName)} CAGR / Ann. Vol (rf=0), 0 bps buy-and-hold · full period">${gridMetricText('sharpe_rf0',bf?.benchmark_sharpe_rf0)}</td>`;
+  h+=`<td title="${escapeHtml(benchName)} max drawdown, 0 bps buy-and-hold · full period" style="${drawdownStyle(bf?.benchmark_max_drawdown)}">${gridMetricText('max_drawdown',bf?.benchmark_max_drawdown)}</td>`;
+  h+='<td title="Benchmark reference row is descriptive and not quality-scored.">—</td></tr>';
  }
  $('gridSummary').innerHTML=h+'</table>';
  const rows=j.rows.filter(r=>r.period===period&&r.selection===selection&&!r.error);
@@ -576,6 +665,13 @@ function renderStrategyGrid(){
    else h+=`<td title="${escapeHtml(rowInfo(r))}" style="${gridCellStyle(metric,r[metric],vals)}">${gridMetricText(metric,r[metric])}</td>`;
   }
   h+='</tr>';
+ }
+ if(hasBench){
+  const brow=rows.find(r=>number(r.benchmark_return));
+  if(brow){
+   const bv=brow[metric==='total_return'?'benchmark_return':'benchmark_'+metric];
+   h+=`<tr><td style="font-weight:600" title="${escapeHtml(benchName)} buy-and-hold, 0 bps · ${escapeHtml(period)}">${escapeHtml(benchName)}</td><td colspan="${j.rebalances.length}" style="${gridCellStyle(metric,bv,vals)}" title="${escapeHtml(benchName)} buy-and-hold (0 bps) · ${escapeHtml(period)} · ${escapeHtml($('gridMetric').selectedOptions[0]?.textContent||metric)}; identical across MOM and rebalance settings">${gridMetricText(metric,bv)}</td></tr>`;
+  }
  }
  $('gridMatrix').innerHTML=h+'</table>';
  if(typeof enhanceV4Grid==='function')enhanceV4Grid(j,strategies);
@@ -596,7 +692,7 @@ function labelResearchResults(j){
  addCaption('lookbackTable',`${diagnostic} | Portfolio ${r.selection} | checked MOM ${j.comparison_spans.join(', ')} | returns (%) — hover for sample counts`,j.comparison_counts);
  addCaption('decay',`${diagnostic} | MOM${r.lookback} | Top10/Top20 and Q1–Q5 (Q5 strongest) | returns (%) — hover for sample counts`,j.decay_counts);
  addCaption('top20table',`${r.universe_label} | as of ${j.top20.date} | Top20 by MOM${r.lookback} | score = N-observation return / (sample daily SD × √N); persistence and streak limited to last ${r.lookback} ranking dates; trend = last 10 available observations.`);
- for(const [id,label] of [['lookbackHeat',`${diagnostic} | ${r.selection} | MOM ${j.comparison_spans.join(', ')}`],['heat',`${diagnostic} | MOM${r.lookback} | Top10/Top20, Q1–Q5`],['eq',`${j.portfolio_label} | net equity: initial capital = 1 before estimated initial trading cost`],['dd',`${j.portfolio_label} | net drawdown from running peak including initial capital (%)`]]){
+ for(const [id,label] of [['lookbackHeat',`${diagnostic} | ${r.selection} | MOM ${j.comparison_spans.join(', ')}`],['heat',`${diagnostic} | MOM${r.lookback} | Top10/Top20, Q1–Q5`],['eq',`${j.portfolio_label} | net equity: initial capital = 1 before estimated initial trading cost${j.benchmark&&j.benchmark.ticker?` | vs ${j.benchmark.name} buy-and-hold (0 bps), both lines from 1.0 on the first shared valuation date`:''}`],['dd',`${j.portfolio_label} | net drawdown from running peak including initial capital (%)`]]){
   $(id).alt=label;
   let caption=$(id).parentElement.querySelector(`[data-chart-caption="${id}"]`);
   if(!caption){caption=document.createElement('div');caption.className='small';caption.dataset.chartCaption=id;$(id).after(caption);}

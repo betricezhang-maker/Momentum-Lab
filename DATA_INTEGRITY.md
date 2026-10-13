@@ -73,6 +73,28 @@ publication marker. Manual checks and post-update validation force a full scan.
 Repeated unchanged research gates reuse the result. Fingerprints exclude paths
 and validation timestamps, so identical CSV contents retain identity after a move.
 
+## Day-valid check tag
+
+Every completed full validation writes two files next to the dataset:
+`integrity_check_tag.json` (the tag) and `integrity_check_report.json` (the full
+report it attests). The tag records when the check ran, the Shanghai calendar
+date it is valid through, the dataset fingerprint, the file signatures and
+acknowledgment signature it was computed from, and the result status. A tag is
+the recorded pass for the default research scope: Research Lab, Strategy Grid,
+the calculation audit and the findings page reuse it instead of re-scanning,
+including after an application restart. Validity ends at the Shanghai day
+boundary, when any dataset file changes, or when review decisions change —
+whichever comes first. A check made at any hour is valid for the remainder of
+that Shanghai day (at most 24 hours, ending at midnight Asia/Shanghai); there is
+no intraday cutoff. Data changes that arrive via an update still end validity
+immediately through the file signatures. A validation requested with an explicit
+`through`/lookback scope never reuses
+the default-scope tag. Every reuse is recorded in `integrity_audit.jsonl` as
+`DATA_VALIDATION_REUSED_CHECK_TAG`. The Data Integrity workspace shows the tag
+(next to the summary): status, check time, valid-through date, dataset id, and
+the reason a stale tag no longer applies. The tag endpoint
+`GET /api/completeness/check-tag` is read-only and never starts a validation.
+
 The Data Manager's Run Integrity Check is local-only. It reports component
 coverage, keys, classification, warnings and expandable evidence. Strategy Grid
 shows the same summary before running. Invalid Live input blocks model generation

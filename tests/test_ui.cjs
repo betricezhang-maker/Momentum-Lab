@@ -121,7 +121,7 @@ assert.match(elements.buildMsg.innerHTML,/FAILED/);
 assert.match(elements.buildMsg.innerHTML,/trace &lt;line&gt;/);
 console.log('PASS: Worker progress clears idle text; inactive API counters hidden; failures expose escaped traceback.');
 vm.runInContext(fs.readFileSync(path.join(__dirname,'../ui/integrity.js'),'utf8'),context);
-elements.integrityDashboard={innerHTML:''};elements.validateMsg={innerHTML:''};
+elements.integrityDashboard={innerHTML:'',querySelectorAll:()=>[]};elements.validateMsg={innerHTML:''};
 context.integrityFixture={status:'FAIL',universe:'ETF_250M',timestamp:'2026-09-14',manifest:{dataset_id:'test-id'},
  components:{raw_price:{first_date:'20260101',last_date:'20260914',rows:3,duplicate_keys:1,conflicting_keys:1,path:'<unsafe>'}},
  checks:[{name:'raw_price_duplicate_keys',status:'FAIL',message:'Duplicate prices',details:{sample:'<script>'}}]};

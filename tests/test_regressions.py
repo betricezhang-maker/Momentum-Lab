@@ -131,6 +131,100 @@ class RegressionTests(unittest.TestCase):
         self.assertIn('24 failed',stages[-1])
         self.assertIn('Saving final results — not finished yet',stages[-1])
 
+    def test_grid_rows_carry_benchmark_period_stats(self):
+        params=self.grid_fixture()
+        ns=self.ns
+        dates=pd.bdate_range('2024-01-01',periods=280)
+        benchmark=pd.Series(100*np.exp(.0005*np.arange(len(dates))),index=dates).rename('benchmark_close')
+        meta=dict(name='CSI 300',ticker='000300.SH',source='bench.csv',basis='price_return',basis_label='price return',dataset_fingerprint='fp')
+        base_load_config=ns['load_config']
+        ns['load_config']=lambda:{**base_load_config(),'benchmark_csv':'bench.csv','benchmark_ticker':'000300.SH','benchmark_name':'CSI 300'}
+        ns['load_benchmark']=lambda *a,**kw:(benchmark.copy(),dict(meta))
+        result=ns['run_strategy_grid'](params)
+        self.assertEqual(result['failed_combinations'],0)
+        data_end=dates.max().normalize()
+        windows={'2024':(pd.Timestamp('2024-01-01'),pd.Timestamp('2024-12-31')),
+                 '2025':(pd.Timestamp('2025-01-01'),min(pd.Timestamp('2025-12-31'),data_end)),
+                 'Full Period':(dates.min().normalize(),data_end)}
+        def expected(start,end):
+            w=benchmark.loc[(benchmark.index>=start)&(benchmark.index<=end)]
+            eq=w/w.iloc[0];rets=w.pct_change(fill_method=None).fillna(0);dd=eq/eq.cummax()-1
+            ann=float(eq.iloc[-1]**(252/max(len(eq)-1,1))-1);vol=float(rets.std(ddof=1)*np.sqrt(252))
+            return dict(benchmark_return=float(eq.iloc[-1]-1),benchmark_annualized_return=ann,
+                        benchmark_annualized_volatility=vol,
+                        benchmark_sharpe_rf0=float(ann/vol) if vol>0 else None,
+                        benchmark_max_drawdown=float(dd.min()))
+        signatures={}
+        for row in result['rows']:
+            exp=expected(*windows[row['period']])
+            for key,value in exp.items():
+                self.assertIn(key,row)
+                if value is None:self.assertIsNone(row[key])
+                else:self.assertAlmostEqual(row[key],value,places=12,msg=f'{row["period"]} {key}')
+            signatures.setdefault(row['period'],set()).add(tuple(sorted(exp.items())))
+        for period,values in signatures.items():
+            self.assertEqual(len(values),1,f'{period} benchmark stats differ across grid rows')
+        def forbidden(*a,**kw):
+            raise AssertionError('benchmark must not load when none is selected')
+        ns['load_benchmark']=forbidden
+        ns['load_config']=base_load_config
+        plain=ns['run_strategy_grid'](params)
+        self.assertTrue(all('benchmark_return' not in row for row in plain['rows']))
+
+    def test_research_equity_chart_overlays_configured_benchmark(self):
+        self.grid_fixture()
+        ns=self.ns
+        ns.update(save_heatmap=lambda *a,**kw:None,save_comparison_chart=lambda *a,**kw:None)
+        dates=pd.bdate_range('2024-01-01',periods=280)
+        benchmark=pd.Series(100*np.exp(.0005*np.arange(len(dates))),index=dates).rename('benchmark_close')
+        meta=dict(name='CSI 300',ticker='000300.SH',source='bench.csv',basis='price_return',basis_label='price return',dataset_fingerprint='fp')
+        base_load_config=ns['load_config']
+        ns['load_config']=lambda:{**base_load_config(),'benchmark_csv':'bench.csv','benchmark_ticker':'000300.SH','benchmark_name':'CSI 300'}
+        ns['load_benchmark']=lambda *a,**kw:(benchmark.copy(),dict(meta))
+        from momentumlab.benchmark import compare_equity
+        ns['compare_equity']=compare_equity
+        calls={}
+        def record_save_line(series,path,title,ylabel,overlay=None):
+            calls[path.name]=(title,overlay)
+        ns['save_line']=record_save_line
+        result=ns['run_research'](dict(universe='CSI300',lookback=10,display_spans=[10,20],selection='Top 5',rebalance_days=10,benchmark='configured'))
+        title,overlay=calls['equity.png']
+        self.assertIn('CSI 300',title)
+        self.assertIsNotNone(overlay)
+        overlay_series,label=overlay
+        self.assertIn('CSI 300',label);self.assertIn('0 bps',label)
+        self.assertEqual(float(overlay_series.iloc[0]),1.0)
+        self.assertEqual(len(overlay_series),result['stats']['observations'])
+        self.assertEqual(result['benchmark']['ticker'],'000300.SH')
+        def forbidden(*a,**kw):
+            raise AssertionError('benchmark must not load when none is selected')
+        ns['load_benchmark']=forbidden
+        ns['load_config']=base_load_config
+        ns['run_research'](dict(universe='CSI300',lookback=10,display_spans=[10,20],selection='Top 5',rebalance_days=10))
+        title,overlay=calls['equity.png']
+        self.assertNotIn('benchmark',title)
+        self.assertIsNone(overlay)
+
+    def test_research_benchmark_guard_when_none_active(self):
+        self.grid_fixture()
+        ns=self.ns
+        ns.update(save_heatmap=lambda *a,**kw:None)
+        def forbidden(*a,**kw):
+            raise AssertionError('benchmark data must not load when no benchmark is active')
+        ns['load_benchmark']=forbidden
+        with self.assertRaisesRegex(ValueError,'no active benchmark is set'):
+            ns['run_research'](dict(universe='CSI300',lookback=10,display_spans=[10,20],selection='Top 5',rebalance_days=10,benchmark='configured'))
+
+
+    def test_save_line_renders_benchmark_overlay_chart(self):
+        ns=self.ns
+        idx=pd.bdate_range('2024-01-01',periods=5)
+        path=self.root/'equity_overlay.png'
+        ns['save_line'](pd.Series([1,.99,1.01,1.02,1.01],index=idx),path,'t','Growth of 1.0',
+                        overlay=(pd.Series([1,1.0,1.005,.99,1.0],index=idx),'CSI 300 benchmark (buy-and-hold, 0 bps)'))
+        self.assertTrue(path.is_file())
+        self.assertGreater(path.stat().st_size,0)
+
     def test_snapshot_replacement_removes_old_constituents(self):
         path = self.root/'members.csv'
         old = pd.DataFrame({'trade_date':[20240101,20240101,20240201], 'con_code':['A','B','C']})

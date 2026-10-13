@@ -5,6 +5,19 @@ const v4Metrics=[['gross_return','Gross Return'],['net_return','Net Return'],['t
 document.getElementById('strategygrid').append(document.getElementById('strategyGridCard'));
 for(const [value,label] of v4Metrics){const option=document.createElement('option');option.value=value;option.textContent=label;$('gridMetric').append(option);}
 
+function benchmarkMetricValue(key,bf){
+ if(!bf)return null;
+ const num=v=>v!=null&&Number.isFinite(Number(v));
+ switch(key){
+  case 'annualized_return': case 'gross_cagr': case 'net_cagr': return num(bf.benchmark_annualized_return)?bf.benchmark_annualized_return:null;
+  case 'annualized_volatility': return num(bf.benchmark_annualized_volatility)?bf.benchmark_annualized_volatility:null;
+  case 'gross_return': case 'net_return': return num(bf.benchmark_return)?bf.benchmark_return:null;
+  case 'gross_max_drawdown': case 'net_max_drawdown': return num(bf.benchmark_max_drawdown)?bf.benchmark_max_drawdown:null;
+  case 'trading_cost_drag': return 0;
+  default: return null;
+ }
+}
+
 function enhanceV4Grid(j,strategies){
  v4Strategies=strategies;
  const table=$('gridSummary').querySelector('table');if(!table)return;
@@ -16,6 +29,14 @@ function enhanceV4Grid(j,strategies){
   let td=document.createElement('td');let button=document.createElement('button');button.className='secondary';button.textContent='History';button.onclick=()=>showGridHistory(i);td.append(button);tr.append(td);
   td=document.createElement('td');button=document.createElement('button');button.className='primary';button.textContent='Add to Live Portfolio';button.disabled=!s.rr.some(r=>r&&!r.error)&&!full;button.onclick=()=>promoteGridStrategy(i);td.append(button);tr.append(td);
  });
+ const benchRow=table.querySelector('tr.benchrow');
+ if(benchRow){
+  const num=v=>v!=null&&Number.isFinite(Number(v));
+  const bf=j.rows.find(r=>r.period==='Full Period'&&num(r.benchmark_return));
+  for(const [key] of metrics){const td=document.createElement('td');td.textContent=gridMetricText(key,benchmarkMetricValue(key,bf));td.title='Benchmark buy-and-hold (0 bps), Full Period; gross equals net at 0 bps. Turnover and holdings metrics do not apply to a passive benchmark.';benchRow.append(td);}
+  let td=document.createElement('td');td.textContent='—';td.title='Benchmark reference row has no rebalance history.';benchRow.append(td);
+  td=document.createElement('td');td.textContent='—';td.title='Benchmark reference row cannot be promoted to a live portfolio.';benchRow.append(td);
+ }
 }
 
 async function showGridHistory(index){

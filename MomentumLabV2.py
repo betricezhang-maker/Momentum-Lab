@@ -392,7 +392,8 @@ def start_data_job(kind, request):
 
     _JOB_CANCEL.clear()
     job_update(
-        status="running", kind=kind, stage="Starting", stage_index=0, stage_total=6,
+        status="running", kind=kind, stage="Starting", stage_index=0,
+        stage_total=2 if kind == "benchmark" else 6,
         current=0, total=0, message="Starting background data job...",
         started_at=time.time(), finished_at=None, elapsed_seconds=0,
         cooldown_remaining=0, last_error=None, traceback=None, checkpoint_notice=None, integrity=None, retained_build_id=None, publication_committed=False, result=None, stage_results=[], request=dict(request)
@@ -406,6 +407,8 @@ def start_data_job(kind, request):
                     bool(request.get("include_limits", True)),
                     request.get("universe")
                 )
+            elif kind == "benchmark":
+                result = update_benchmark_data(request)
             else:
                 result = refresh_data(request["end_date"], request.get("universe"))
             job_update(
@@ -852,6 +855,138 @@ def build_adjusted_prices(raw_path, factor_path, output_path):
 def default_data_paths(cfg, universe=None):
     universe = universe or cfg.get("active_universe","CSI300")
     return selected_universe_paths(cfg,universe)
+
+
+# -------------------- BENCHMARK INDEX DATA --------------------
+
+BENCHMARK_INDEXES = {
+    "CSI300": {"ts_code": "000300.SH", "name": "CSI 300"},
+    "CSI500": {"ts_code": "000905.SH", "name": "CSI 500"},
+    "CSI300_TR": {"ts_code": "H00300.CSI", "name": "CSI 300 Total Return"},
+    "CSI500_TR": {"ts_code": "H00905.CSI", "name": "CSI 500 Total Return"},
+}
+BENCHMARK_EARLIEST = pd.Timestamp("2005-01-01")
+
+def benchmark_paths(cfg=None):
+    cfg = resolve_config_paths(cfg or load_config())
+    folder = Path(cfg["data_folder"]) / "benchmarks"
+    return {name: folder / f"{spec['ts_code']}.csv" for name,spec in BENCHMARK_INDEXES.items()}
+
+def validate_benchmark_frame(frame, code, label):
+    need = {"ts_code","trade_date","close"}
+    if not need.issubset(frame.columns):
+        raise ValueError(f"{label} benchmark CSV missing columns: {sorted(need - set(frame.columns))}")
+    rows = frame[frame["ts_code"].astype(str).str.strip().eq(code)]
+    if rows.empty:
+        raise ValueError(f"{label} benchmark CSV has no rows for {code}.")
+    d = parse_dates(rows["trade_date"])
+    close = pd.to_numeric(rows["close"], errors="coerce")
+    if d.isna().any() or close.isna().any() or (~np.isfinite(close.to_numpy(dtype=float))).any() or close.le(0).any():
+        raise ValueError(f"{label} benchmark data contains unparseable dates or invalid/non-positive closes; nothing was written.")
+    if d.duplicated().any():
+        raise ValueError(f"{label} benchmark data contains duplicate trading dates; conflicting rows must be resolved before rebuilding.")
+    return rows.assign(trade_date=d, close=close)
+
+def _benchmark_summary(path, code, label):
+    rows = validate_benchmark_frame(read_csv(path), code, label)
+    return {"rows": int(len(rows)),
+            "start": rows["trade_date"].min().strftime("%Y-%m-%d"),
+            "end": rows["trade_date"].max().strftime("%Y-%m-%d"),
+            "path": str(path)}
+
+def fetch_benchmark_index(name, path, end_date, start_date=None):
+    spec = BENCHMARK_INDEXES[name]
+    code, label = spec["ts_code"], spec["name"]
+    path = Path(path)
+    if start_date is not None:
+        start = start_date
+    else:
+        existing = file_max_date(path)
+        start = BENCHMARK_EARLIEST if existing is None else existing + pd.Timedelta(days=1)
+    fetched = 0
+    requests = 0
+    if start <= end_date:
+        windows = list(date_chunks(start, end_date, months=60))
+        for i,(s,e) in enumerate(windows,1):
+            job_check_cancel()
+            job_update(current=i-1, total=len(windows),
+                       message=f"{label} ({code}): requesting {s:%Y-%m-%d} to {e:%Y-%m-%d} ({i}/{len(windows)})")
+            x = tushare_call("index_daily",
+                             {"ts_code":code,
+                              "start_date":s.strftime("%Y%m%d"),
+                              "end_date":e.strftime("%Y%m%d")},
+                             "ts_code,trade_date,close")
+            requests += 1
+            if len(x):
+                # Provider rows are validated before any write so a bad response never touches disk.
+                validate_benchmark_frame(x, code, label)
+                fetched += int(len(x))
+                append_dedupe(path, x, ["ts_code","trade_date"])
+    if not path.exists():
+        raise ValueError(f"{label} ({code}): index_daily returned no rows for the requested range; no benchmark file was created.")
+    out = _benchmark_summary(path, code, label)
+    out.update(index=name, code=code, status="PASS" if fetched else "SKIPPED / ALREADY CURRENT",
+               requests=requests, rows_fetched=fetched)
+    return out
+
+def update_benchmark_data(request):
+    cfg = load_config()
+    paths = benchmark_paths(cfg)
+    selected = request.get("benchmarks") or list(BENCHMARK_INDEXES)
+    if not isinstance(selected, list):
+        raise ValueError("benchmarks must be a list of index identifiers.")
+    unknown = [x for x in selected if x not in BENCHMARK_INDEXES]
+    if unknown:
+        raise ValueError(f"Unknown benchmark index: {', '.join(map(str,unknown))}.")
+    end = pd.Timestamp(request.get("end_date") or pd.Timestamp.today().normalize())
+    if pd.isna(end):
+        raise ValueError("Update end date is invalid.")
+    start = None
+    if request.get("start_date"):
+        try:
+            start = pd.Timestamp(request["start_date"])
+        except (TypeError, ValueError):
+            start = pd.NaT
+        if pd.isna(start):
+            raise ValueError("Update start date is invalid.")
+        start = max(start.normalize(), BENCHMARK_EARLIEST)
+        if start > end:
+            raise ValueError("Update start date is after the end date.")
+    results = []
+    total = len(selected)
+    for i,name in enumerate(selected,1):
+        job_check_cancel()
+        spec = BENCHMARK_INDEXES[name]
+        job_update(stage_index=i, stage_total=total, stage=f"{spec['name']} benchmark",
+                   current=0, total=1, message=f"{spec['name']} ({spec['ts_code']}): checking local coverage...")
+        item = fetch_benchmark_index(name, paths[name], end, start_date=start)
+        results = [x for x in results if x.get("index") != name] + [item]
+        job_update(current=1, total=1, stage_results=list(results),
+                   message=f"{spec['name']}: {item['rows']:,} rows through {item['end']}")
+    return {"ok":True, "benchmarks":results}
+
+def benchmark_status():
+    cfg = load_config()
+    paths = benchmark_paths(cfg)
+    active_code = str(cfg.get("benchmark_ticker","") or "").strip()
+    active_csv = str(cfg.get("benchmark_csv","") or "").strip()
+    indexes = {}
+    for name,spec in BENCHMARK_INDEXES.items():
+        p = paths[name]
+        info = inspect_csv(str(p),"benchmark")
+        csv_match = True
+        if active_csv:
+            try:
+                csv_match = Path(active_csv) == Path(p)
+            except Exception:
+                csv_match = False
+        info["ts_code"] = spec["ts_code"]
+        info["name"] = spec["name"]
+        info["is_active"] = bool(active_code == spec["ts_code"] and csv_match)
+        if info["exists"]:
+            info["extra"] = "index close series"
+        indexes[name] = info
+    return {"folder": str(paths["CSI300"].parent), "indexes": indexes}
 
 def full_build(start_date, end_date, include_limits=True, universe=None):
     from momentumlab import pending_builds
@@ -1682,6 +1817,13 @@ def validate_research_files(universe=None, mode='cached', through=None, signal_d
     result['review_groups']=[dict(group_id=g['group_id'],issue_ids=g['issue_ids']) for g in review_groups(result)]
     return result
 
+def check_tag_status(universe,build_id=None):
+    """Read-only day-tag info for the integrity workspace; never runs a validation."""
+    from momentumlab.data_integrity import inspect_check_tag
+    if universe not in UNIVERSES: return {'ok':False,'error':'Unknown research universe.'}
+    tag=inspect_check_tag(integrity_review_paths(universe,build_id),universe)
+    return {'ok':True,'tag':tag,'universe':universe,'build_id':build_id or ''}
+
 def repair_completeness_issues(universe, issue_ids):
     """Individual and batch repair share the same staged provider workflow."""
     return bulk_repair_issues(universe,issue_ids)
@@ -1966,12 +2108,86 @@ def backtest_v4(ranked, selection, rebalance_days, start_date=None, end_date=Non
     return apply_costs(gross, history, stats, cost_bps)
 
 
-def save_line(series,path,title,ylabel):
+def save_line(series,path,title,ylabel,overlay=None):
     plt=plotting()
     fig,ax=plt.subplots(figsize=(10,5))
-    ax.plot(series.index,series.values)
+    if overlay is not None:
+        bench,bench_label=overlay
+        ax.plot(series.index,series.values,label='Strategy (net of estimated costs)')
+        ax.plot(bench.index,bench.values,label=bench_label)
+        ax.legend()
+    else:
+        ax.plot(series.index,series.values)
     ax.set_title(title); ax.set_xlabel("Date"); ax.set_ylabel(ylabel); ax.grid(True,alpha=.25)
     fig.tight_layout(); fig.savefig(path,dpi=160,bbox_inches="tight"); plt.close(fig)
+
+SECTOR_KEYWORDS=[
+    # First match wins, so specific themes precede generic words they contain.
+    ("Auto",["汽车","智能车","车联网","零部件"]),
+    ("Semiconductors",["半导体","芯片","集成电路"]),
+    ("Software & AI",["软件","计算机","信创","人工智能","算力","云计算","大数据","数据要素","数字经济","机器人","智能"]),
+    ("Fintech",["金融科技"]),
+    ("Communication",["通信","5G","6G","光模块","光通信"]),
+    ("Electronics",["电子"]),
+    ("Internet & Media",["互联网","传媒","游戏","影视","动漫","电竞"]),
+    ("Healthcare",["医药","医疗","生物","创新药","疫苗","器械","健康"]),
+    ("Banks",["银行"]),
+    ("Securities & Insurance",["证券","券商","保险"]),
+    ("Real Estate",["地产","房地产","物业"]),
+    ("Consumer",["消费","食品","饮料","白酒","酒","家电","旅游","免税","零售","商贸","农业","畜牧","养殖","种业","家居"]),
+    ("New Energy",["新能源","光伏","储能","电池","锂电","风电","碳中和","绿电","绿色电力","氢能","充电桩"]),
+    ("Defense & Aerospace",["军工","国防","航天","航空","卫星","船舶","兵器"]),
+    ("Materials & Commodities",["材料","新材料","化工","有色","稀土","钢铁","煤炭","矿业","黄金","白银","豆粕","原油"]),
+    ("Industrials & Infrastructure",["工业","制造","机械","装备","基建","建筑","建材","电力","公用","燃气","水务","交通","铁路","公路","港口","航运","物流","机场"]),
+    ("Dividend & Value",["红利","股息","分红","低波","价值"]),
+    ("Hong Kong & Overseas",["港股","香港","恒生","纳斯达克","纳指","标普","道琼斯","德国","日经","法国","沙特","东南亚","亚太"]),
+    ("Broad Market",["300","500","800","1000","2000","A500","科创","创业板","科创板","深证","上证","MSCI","综指","成指"]),
+]
+
+def classify_sector(name):
+    text=str(name or "")
+    for label,keys in SECTOR_KEYWORDS:
+        if any(key in text for key in keys):
+            return label
+    return "Other / Unclassified"
+
+def sector_allocation_table(log,names):
+    """Per-rebalance sector weights (target 1/N per holding) and latest holdings detail."""
+    if log is None or len(log)==0:
+        return None,None
+    rows=[]
+    for record in log.itertuples(index=False):
+        tickers=[t.strip() for t in str(record.tickers).split(",") if t.strip()]
+        if not tickers:
+            continue
+        each=1.0/len(tickers)
+        sector_weight={}
+        for ticker in tickers:
+            sector=classify_sector(names.get(ticker,""))
+            sector_weight[sector]=sector_weight.get(sector,0.0)+each
+        rows.append({"entry_date":record.entry_date,**sector_weight})
+    if not rows:
+        return None,None
+    table=pd.DataFrame(rows)
+    table["entry_date"]=pd.to_datetime(table["entry_date"])
+    table=table.sort_values("entry_date").set_index("entry_date").fillna(0.0)
+    last_tickers=[t.strip() for t in str(log.iloc[-1]["tickers"]).split(",") if t.strip()]
+    latest=[{"ticker":t,"name":str(names.get(t,"")),"sector":classify_sector(names.get(t,"")),
+             "weight":(1.0/len(last_tickers) if last_tickers else None)} for t in last_tickers]
+    return table,latest
+
+def save_sector_chart(eq,table,path,title):
+    plt=plotting()
+    daily=table.reindex(eq.index,method="ffill")
+    daily=daily.loc[:,daily.sum()>0].fillna(0.0)
+    labels=list(daily.columns)
+    colors=plt.cm.tab20(np.linspace(0,1,max(len(labels),1)))
+    fig,ax=plt.subplots(figsize=(10,5))
+    ax.stackplot(daily.index,[daily[label].values for label in labels],labels=labels,colors=colors,alpha=.9)
+    ax.set_title(title);ax.set_xlabel("Date");ax.set_ylabel("Portfolio weight")
+    ax.set_ylim(0,1);ax.grid(True,alpha=.25)
+    ax.legend(loc="center left",bbox_to_anchor=(1.0,.5),fontsize=8)
+    fig.tight_layout();fig.savefig(path,dpi=160,bbox_inches="tight");plt.close(fig)
 
 def run_strategy_grid(params):
     """Run a robustness grid across calendar years, momentum lookbacks and rebalance periods.
@@ -2050,6 +2266,32 @@ def run_strategy_grid(params):
     def grid_progress(detail):
         elapsed=int(time.monotonic()-grid_started)
         calculation_stage(f'{len(rows)} / {grid_total} combinations processed ({len(rows)*100/grid_total:.0f}%) · {grid_failed} failed · {elapsed//60}m {elapsed%60:02d}s · {detail}')
+    # Benchmark buy-and-hold statistics per requested period, using the same
+    # conventions as backtest() stats (0 bps, 252-day annualization). Values
+    # depend only on the period, so they are computed once and shared by every
+    # lookback / rebalance / selection row for that period.
+    benchmark_stats_cache={}
+    def benchmark_period_stats(label,start,end):
+        if benchmark_close is None:
+            return None
+        if label in benchmark_stats_cache:
+            return benchmark_stats_cache[label]
+        bwin=benchmark_close.loc[(benchmark_close.index>=start)&(benchmark_close.index<=end)]
+        if len(bwin)<2:
+            benchmark_stats_cache[label]=None
+            return None
+        beq=bwin/bwin.iloc[0]
+        brets=bwin.pct_change(fill_method=None).fillna(0)
+        bdd=beq/beq.cummax()-1
+        b_ann=float(beq.iloc[-1]**(252/max(len(beq)-1,1))-1)
+        b_vol=float(brets.std(ddof=1)*np.sqrt(252))
+        st={"benchmark_return":float(beq.iloc[-1]-1),
+            "benchmark_annualized_return":b_ann,
+            "benchmark_annualized_volatility":b_vol,
+            "benchmark_sharpe_rf0":float(b_ann/b_vol) if b_vol>0 else None,
+            "benchmark_max_drawdown":float(bdd.min())}
+        benchmark_stats_cache[label]=st
+        return st
     def add_period(label,start,end):
         nonlocal grid_failed
         for lb in [current_lb]:
@@ -2076,7 +2318,7 @@ def run_strategy_grid(params):
                             "backtest_start":stats.get("backtest_start"),
                             "backtest_end":stats.get("backtest_end"),
                             "observations":stats.get("observations")
-                            ,"benchmark_return": (float(benchmark_close.loc[(benchmark_close.index>=start)&(benchmark_close.index<=end)].iloc[-1]/benchmark_close.loc[(benchmark_close.index>=start)&(benchmark_close.index<=end)].iloc[0]-1) if benchmark_close is not None and len(benchmark_close.loc[(benchmark_close.index>=start)&(benchmark_close.index<=end)])>=2 else None),
+                            ,**(benchmark_period_stats(label,start,end) or {}),
                             "benchmark_basis": benchmark_meta.get('basis') if benchmark_close is not None else None
                         })
                     except Exception as e:
@@ -2152,6 +2394,7 @@ def etf_momentum_observations(mom10, primary, weights, history, selection, price
         p=prices[['ts_code','trade_date','adj_close']].copy();p['trade_date']=parse_dates(p.trade_date)
         px=p.pivot(index='trade_date',columns='ts_code',values='adj_close').reindex(sessions)
         px=px.where(np.isfinite(px)&px.gt(0))
+    cross_rows=[]
     for record in history.itertuples():
         signal=pd.Timestamp(record.signal_date);available=[d for d in dates if d<=signal]
         members=snapshots[available[-1]] if available else set()
@@ -2165,6 +2408,12 @@ def etf_momentum_observations(mom10, primary, weights, history, selection, price
             exclusions[ticker]=str(why)
         # Do not count an invalid MOM window as a nonpositive score.
         participation=float(valid.gt(0).mean()) if n and len(valid)>0 and len(valid)/n>=participation_min_coverage else None
+        # The same minimum-coverage gate governs the cross-sectional reading; gated dates stay unavailable.
+        distribution=dict.fromkeys(['eligible_mom10_min','eligible_mom10_q25','eligible_mom10_median','eligible_mom10_q75','eligible_mom10_max'])
+        if participation is not None:
+            distribution.update(eligible_mom10_min=float(valid.min()),eligible_mom10_q25=float(valid.quantile(.25)),
+                eligible_mom10_median=float(valid.median()),eligible_mom10_q75=float(valid.quantile(.75)),eligible_mom10_max=float(valid.max()))
+            cross_rows.extend(dict(signal_date=signal,ts_code=str(ticker),momentum_score=float(value)) for ticker,value in valid.items())
         participation_status=('Available: positive / valid MOM10 scores; excluded ETFs omitted from denominator' if participation is not None else ('Unavailable: no historical eligible membership' if not n else f'Unavailable: {len(valid)}/{n} valid production MOM10; minimum coverage {participation_min_coverage:.1%}. '+json_dumps(exclusions,ensure_ascii=False)))
         returns=pd.Series(dtype=float);excluded60={};position=sessions.get_indexer([signal])[0] if len(sessions) else -1
         window60=px.iloc[position-60:position+1].reindex(columns=sorted(members)) if px is not None and position>=60 else None
@@ -2188,12 +2437,14 @@ def etf_momentum_observations(mom10, primary, weights, history, selection, price
         rows.append(dict(signal_date=signal,execution_date=pd.Timestamp(record.entry_date),
             membership_date=available[-1] if available else pd.NaT,eligible_count=n,valid_mom10_count=len(valid),
             excluded_count=n-len(valid),positive_count=int(valid.gt(0).sum()),coverage=len(valid)/n if n else None,
+            **distribution,
             positive_participation=participation,participation_min_coverage=participation_min_coverage,participation_status=participation_status,mom10_exclusions=json_dumps(exclusions,ensure_ascii=False),
             average_top10_mom10=float(target_scores.mean()) if not reason else None,top10_status=reason or 'Complete',
             selected_count=len(actual),selected_tickers=','.join(actual),median_return60=median60,
             valid_return60_count=len(returns),excluded_return60_count=n-len(returns),coverage_return60=coverage60,
             median_min_coverage=median_min_coverage,median_return60_status=median_status,return60_exclusions=json_dumps(excluded60,ensure_ascii=False)))
     result=pd.DataFrame(rows)
+    result.attrs['mom10_cross_section']=pd.DataFrame(cross_rows,columns=['signal_date','ts_code','momentum_score'])
     result['holding_end_date']=pd.NaT;result['subsequent_net_return']=np.nan;result['holding_return_status']='Final holding period not complete'
     for i in range(len(result)-1):
         start=result.iloc[i].execution_date;end=result.iloc[i+1].execution_date
@@ -2237,12 +2488,28 @@ def save_etf_momentum_scatter(observations,path):
 
 def save_etf_momentum_chart(equity, observations, path, title, median_overlay=False, color_returns=False):
     """Use the existing static chart infrastructure; no interpolation of signals."""
-    fig,axes=plt.subplots(4,1,figsize=(12,12),sharex=True)
+    plt=plotting()
+    fig,axes=plt.subplots(5,1,figsize=(12,14.5),sharex=True)
     axes[0].plot(equity.index,(equity-1)*100,label='Existing net backtest (modeled costs included)')
     axes[0].set_ylabel('Cumulative return (%)');axes[0].legend()
-    for ax,column,label,scale in [(axes[1],'positive_participation','Positive MOM10 (%)',100),
-                                  (axes[2],'average_top10_mom10','Mean MOM10 (dimensionless)',1),
-                                  (axes[3],'median_return60','Median Eligible ETF 60-Session Return (%)',100)]:
+    dates=observations.signal_date
+    cross=observations.attrs.get('mom10_cross_section')
+    if cross is not None and len(cross):
+        axes[1].scatter(cross.signal_date,cross.momentum_score,s=3,alpha=.25,color='#666666',label='All eligible valid MOM10 values (invalid scores omitted, not zero)')
+    axes[1].fill_between(dates,pd.to_numeric(observations.eligible_mom10_q25,errors='coerce'),pd.to_numeric(observations.eligible_mom10_q75,errors='coerce'),color='#286cb0',alpha=.28,label='Cross-sectional IQR of valid scores')
+    cross_median=pd.to_numeric(observations.eligible_mom10_median,errors='coerce')
+    axes[1].plot(dates,cross_median,color='#286cb0',linewidth=1,label='Cross-sectional median of valid scores')
+    # Signals arrive on the rebalance cadence (about ten trading days apart), so a trailing
+    # 30-calendar-day window averages the few most recent readings instead of 30 points.
+    median_ma=pd.Series(cross_median.to_numpy(),index=pd.DatetimeIndex(dates)).rolling('30D',min_periods=1).mean()
+    axes[1].plot(dates,median_ma.to_numpy(),color='#c44e52',linewidth=1.6,label='30-day moving average of the median (trailing window)')
+    missing=cross_median.isna()
+    axes[1].scatter(dates[missing],[.03]*int(missing.sum()),transform=axes[1].get_xaxis_transform(),marker='x',color='grey',label='Unavailable (axis-base marker, not zero)')
+    axes[1].axhline(0,color='grey',linewidth=.7)
+    axes[1].set_ylabel('Eligible MOM10 cross-section (dimensionless)');axes[1].legend(fontsize=8)
+    for ax,column,label,scale in [(axes[2],'positive_participation','Positive MOM10 (%)',100),
+                                  (axes[3],'average_top10_mom10','Mean MOM10 (dimensionless)',1),
+                                  (axes[4],'median_return60','Median Eligible ETF 60-Session Return (%)',100)]:
         vals,median,returns,colors=etf_visual_series(observations,column)
         ax.plot(observations.signal_date,vals*scale,color='#286cb0',linewidth=1,label='Signal observations (gaps retained)')
         ax.scatter(observations.signal_date,vals*scale,s=16,c=colors if color_returns else '#286cb0',label='Recorded signal-date observations')
@@ -2250,11 +2517,26 @@ def save_etf_momentum_chart(equity, observations, path, title, median_overlay=Fa
         missing=vals.isna()
         ax.scatter(observations.loc[missing,'signal_date'],[.03]*int(missing.sum()),transform=ax.get_xaxis_transform(),marker='x',color='grey',label='Unavailable (axis-base marker, not zero)')
         ax.set_ylabel(label);ax.legend(fontsize=8)
-    axes[1].set_ylim(0,100);axes[2].axhline(0,color='grey',linewidth=.7)
-    axes[3].axhline(0,color='grey',linewidth=.7)
-    axes[3].set_xlabel('Signal date')
+    axes[2].set_ylim(0,100);axes[3].axhline(0,color='grey',linewidth=.7)
+    axes[4].axhline(0,color='grey',linewidth=.7)
+    axes[4].set_xlabel('Signal date')
     start=min(pd.Timestamp(equity.index.min()),observations.signal_date.min())
-    for ax in axes:ax.set_xlim(start,equity.index.max());ax.grid(alpha=.2)
+    import calendar
+    import matplotlib.dates as mdates
+    import matplotlib.ticker as mticker
+    def month_letter(x,pos):
+        stamp=mdates.num2date(x)
+        return '' if stamp.month==1 else calendar.month_abbr[stamp.month][0]
+    for ax in axes:
+        ax.set_xlim(start,equity.index.max())
+        ax.xaxis.set_major_locator(mdates.YearLocator())
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y'))
+        ax.xaxis.set_minor_locator(mdates.MonthLocator())
+        ax.xaxis.set_minor_formatter(mticker.FuncFormatter(month_letter))
+        ax.tick_params(axis='x',which='major',pad=16)
+        ax.tick_params(axis='x',which='minor',pad=3,labelsize=7)
+        ax.grid(which='major',alpha=.22)
+        ax.grid(which='minor',axis='x',alpha=.1,linewidth=.4)
     fig.suptitle(title+'\nDiagnostic only · '+('Green/red: subsequent gain/loss; grey: zero or unavailable outcome' if color_returns else 'Daily net returns and signal-date indicators'))
     fig.tight_layout();fig.savefig(path,dpi=130);plt.close(fig)
 
@@ -2345,6 +2627,8 @@ def run_research(params):
     eq,dd,log,stats=backtest_v4(ranked,selection,rebalance,start,end,cost)
     benchmark_result={'selected':benchmark_id}
     if benchmark_id not in ('none','None',''):
+        if not str(cfg.get('benchmark_csv','')).strip():
+            raise ValueError('Benchmark comparison was requested, but no active benchmark is set. In Data Manager → Benchmark Data, build the index data and click "Set as active benchmark", then re-run.')
         benchmark_close,benchmark_result=load_benchmark(cfg.get('benchmark_csv'),cfg.get('benchmark_ticker'),cfg.get('benchmark_name') or cfg.get('benchmark_ticker'),cfg.get('benchmark_basis','price_return'))
         curves,benchmark_stats,coverage=compare_equity(eq,benchmark_close,start,end)
         curves.to_csv(out/"benchmark_comparison.csv")
@@ -2353,7 +2637,13 @@ def run_research(params):
         stats['benchmark']=benchmark_result
     ep=out/"equity.png"; dp=out/"drawdown.png"
     portfolio_label = f"{UNIVERSES[universe]['label']} | {selection} | MOM{lookback} | {rebalance}D rebalance | {cost:g} bps\n{stats['backtest_start']} → {stats['backtest_end']} | T+1 adjusted close | {stats['observations']} observations"
-    save_line(eq,ep,portfolio_label + '\nNet equity — costs include initial funding',"Growth of 1.0")
+    if benchmark_id not in ('none','None',''):
+        # The strategy line stays identical to the no-benchmark chart; the benchmark is
+        # normalized to 1.0 on the same first valuation date (compare_equity forbids gaps).
+        save_line(eq,ep,portfolio_label + f"\nNet equity vs {benchmark_result['name']} benchmark — benchmark is buy-and-hold with 0 bps costs","Growth of 1.0",
+                  overlay=(curves['benchmark']/100,f"{benchmark_result['name']} benchmark (buy-and-hold, 0 bps)"))
+    else:
+        save_line(eq,ep,portfolio_label + '\nNet equity — costs include initial funding',"Growth of 1.0")
     save_line(dd*100,dp,portfolio_label + '\nDrawdown from running equity peak',"Drawdown (%)")
     eq.to_csv(out/"equity.csv"); dd.to_csv(out/"drawdown.csv"); log.to_csv(out/"rebalance_log.csv",index=False)
     (out/'rebalance_history.json').write_text(json_dumps(history_provenance(log,valid,params,out.name),ensure_ascii=False),encoding='utf-8')
@@ -2396,6 +2686,22 @@ def run_research(params):
                     monitor_names[str(code).strip()] = str(name).strip()
     for row in top20['rows']:
         row['name'] = monitor_names.get(str(row['ticker']).strip(), '')
+    sector_view={'status':'unavailable','note':'Sector allocation needs the fund classification file (built for the ETF universe).'}
+    try:
+        if paths.get('classification_csv') and Path(paths['classification_csv']).is_file():
+            sector_table,sector_latest=sector_allocation_table(log,monitor_names)
+            if sector_table is not None:
+                sector_csv=out/'sector_allocation.csv'
+                sector_table.to_csv(sector_csv,encoding='utf-8-sig')
+                sector_chart=out/'sector_allocation.png'
+                save_sector_chart(eq,sector_table,sector_chart,portfolio_label+'\nSector allocation by rebalance — target weights (1/N per holding); intra-period drift not shown')
+                sector_view={'status':'available','chart':str(sector_chart),'csv':str(sector_csv),
+                             'rebalances':int(len(sector_table)),'latest':sector_latest,
+                             'note':'Sectors inferred from fund names by keyword rules; names matching no rule are Other / Unclassified. Weights are rebalance targets (1/N per holding); intra-period price drift is not shown.'}
+    except Exception as exc:
+        sector_view={'status':'unavailable','error':str(exc)}
+    metadata['sector_allocation']=sector_view
+    (out/'run_metadata.json').write_text(json_dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
     etf_monitor=None
     if universe=='ETF_250M':
         # Reuse cached production rankings and the already completed net backtest.
@@ -2405,17 +2711,19 @@ def run_research(params):
             observations=etf_momentum_observations(ranked_for(10),ranked,weights,log,selection,prices,participation_min_coverage=participation_coverage)
             csv=out/'etf_momentum_observations.csv';chart=out/'etf_momentum_conditions.png'
             observations.to_csv(csv,index=False,encoding='utf-8-sig')
+            cross_csv=out/'etf_mom10_cross_section.csv'
+            observations.attrs['mom10_cross_section'].to_csv(cross_csv,index=False,encoding='utf-8-sig')
             save_etf_momentum_chart(eq,observations,chart,portfolio_label)
             variants={'00':str(chart)}
             for overlay,colored in [(False,True),(True,False),(True,True)]:
                 key=f'{int(overlay)}{int(colored)}';variant=out/f'etf_momentum_conditions_{key}.png'
                 save_etf_momentum_chart(eq,observations,variant,portfolio_label,overlay,colored);variants[key]=str(variant)
-            etf_monitor={'status':'available','chart':str(chart),'csv':str(csv),'observations':len(observations),
+            etf_monitor={'status':'available','chart':str(chart),'csv':str(csv),'cross_csv':str(cross_csv),'observations':len(observations),
                 'chart_variants':variants,
                 'unavailable_participation':int(observations.positive_participation.isna().sum()),
                 'unavailable_top10':int(observations.average_top10_mom10.isna().sum()),
                 'coverage_rows':observations.to_dict('records'),'participation_min_coverage':participation_coverage,
-                'note':f'Participation = eligible ETFs with positive valid MOM10 / eligible ETFs with valid MOM10; minimum eligible-universe coverage {participation_coverage:.1%}. Excluded scores are not zero. Median Eligible ETF 60-Session Return requires 61 consecutive adjusted closes per ETF and at least 80% eligible coverage; it is not an investable benchmark or portfolio. Latest eligible snapshot on/before signal is reused with production equity classification. Historical classification publication vintages are unavailable, so strict point-in-time classification cannot be independently verified. No interpolation. Subsequent net returns use saved NAV before current/next execution costs (current cost included, next excluded); final incomplete periods and periods with missing held prices are unavailable. Static panels share a date axis; no hover.'}
+                'note':f'Participation = eligible ETFs with positive valid MOM10 / eligible ETFs with valid MOM10; minimum eligible-universe coverage {participation_coverage:.1%}. Excluded scores are not zero. The cross-section panel plots every eligible valid MOM10 value with its interquartile band, median and a trailing 30-calendar-day moving average of the median under the same minimum-coverage gate; invalid scores are omitted, never zero, and exact values are in etf_mom10_cross_section.csv. Median Eligible ETF 60-Session Return requires 61 consecutive adjusted closes per ETF and at least 80% eligible coverage; it is not an investable benchmark or portfolio. Latest eligible snapshot on/before signal is reused with production equity classification. Historical classification publication vintages are unavailable, so strict point-in-time classification cannot be independently verified. No interpolation. Subsequent net returns use saved NAV before current/next execution costs (current cost included, next excluded); final incomplete periods and periods with missing held prices are unavailable. Static panels share a date axis; no hover.'}
             if weights.trade_date.nunique()<2:etf_monitor['note']+=' Only one membership snapshot exists; historical survivorship bias cannot be ruled out.'
         except Exception as exc:
             etf_monitor={'status':'unavailable','note':'ETF diagnostic unavailable: '+str(exc)}
@@ -2455,6 +2763,7 @@ def run_research(params):
             "etf_momentum_monitor":etf_monitor,
             "provenance":metadata['provenance'],"integrity":valid,
             "notes":notes,"diagnostic_label":diagnostic_label,"portfolio_label":portfolio_label,
+            "sector_allocation":sector_view,
             "rebalance_history":history_provenance(log,valid,params,out.name),
             "run":{"universe":universe,"universe_label":UNIVERSES[universe]["label"],
                    "lookback":lookback,"selection":selection,"rebalance_days":rebalance,
@@ -2718,6 +3027,7 @@ class Handler(BaseHTTPRequestHandler):
                        "app_root":str(ROOT),"resource_root":str(RESOURCE_ROOT)}); return
         if u.path=="/api/config": self.json(load_config()); return
         if u.path=="/api/status": self.json({"ok":True,"status":data_status()}); return
+        if u.path=="/api/benchmark-status": self.json({"ok":True,"benchmarks":benchmark_status()}); return
         if u.path=="/api/job-status": self.json({"ok":True,"job":job_snapshot()}); return
         if u.path=='/api/pending-builds':
             from momentumlab.pending_builds import list_builds
@@ -2743,6 +3053,9 @@ class Handler(BaseHTTPRequestHandler):
                 self.json(result)
             except Exception as exc:self.json({'ok':False,'error':str(exc)},400)
             return
+        if u.path=='/api/completeness/check-tag':
+            q=parse_qs(u.query)
+            self.json(check_tag_status(q.get('universe',['CSI300'])[0],q.get('build_id',[''])[0]));return
         if u.path=='/api/completeness/preview':
             from momentumlab.issue_review import load_preview
             q=parse_qs(u.query);universe=q.get('universe',[''])[0]
@@ -2890,6 +3203,8 @@ class Handler(BaseHTTPRequestHandler):
                 self.json({"ok":True,"job":start_data_job("full_build",body)}); return
             if u.path=="/api/refresh":
                 self.json({"ok":True,"job":start_data_job("refresh",body)}); return
+            if u.path=="/api/benchmark-build":
+                self.json({"ok":True,"job":start_data_job("benchmark",body)}); return
             if u.path=="/api/job-cancel":
                 self.json(cancel_data_job()); return
             if u.path=="/api/job-resume":

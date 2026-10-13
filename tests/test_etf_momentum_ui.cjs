@@ -3,9 +3,12 @@ const html=fs.readFileSync('ui/index.html','utf8');
 const code=html.slice(html.indexOf('   const em=j.etf_momentum_monitor;'),html.indexOf('   labelResearchResults(j);'));
 const nodes={};const $=id=>nodes[id]??={style:{},innerHTML:'',textContent:'',src:''};
 function render(em){vm.runInNewContext(code,{$,j:{etf_momentum_monitor:em},escapeHtml:String,fileUrl:x=>'/file?path='+x,pct:x=>x==null?'Unavailable':(x*100)+'%',pagedTable:(key,rows,render)=>render(rows)});}
-render({status:'available',note:'Coverage warning',chart:'test.png',csv:'test.csv',observations:10,unavailable_participation:2,unavailable_top10:0});
+render({status:'available',note:'Coverage warning',chart:'test.png',csv:'test.csv',cross_csv:'cross.csv',observations:10,unavailable_participation:2,unavailable_top10:0});
 assert.equal($('etfMomentumPanel').style.display,'block');assert.match($('etfMomentumChart').src,/test.png/);
 assert.match($('etfMomentumEvidence').innerHTML,/Download indicator data/);
+assert.match($('etfMomentumEvidence').innerHTML,/Download eligible MOM10 cross-section values/);assert.match($('etfMomentumEvidence').innerHTML,/cross\.csv/);
+render({status:'available',note:'Legacy run',chart:'legacy.png',csv:'legacy.csv',observations:10});
+assert(!$('etfMomentumEvidence').innerHTML.includes('cross-section'));
 assert(!code.includes('recorded signal dates'));assert(!code.includes("pagedTable('etf-monitor'"));assert(!code.includes('renderETFConditional'));
 render(null);assert.equal($('etfMomentumPanel').style.display,'none');assert.equal($('etfMomentumEvidence').innerHTML,'');
 render({status:'unavailable',note:'Missing evidence'});assert.equal($('etfMomentumChart').style.display,'none');assert.equal($('etfMomentumInfo').textContent,'Missing evidence');
