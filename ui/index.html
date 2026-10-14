@@ -69,6 +69,7 @@ button.danger{background:#b42318;color:white}
 <option value="ETF_250M">Equity ETF ≥ RMB 250M</option>
 </select></div>
 <div id="dataUniverseMsg" class="small">Choose one dataset. Build/Rebuild and Incremental Update apply only to this selection.</div></div>
+<div id="dataFreshness" class="small" role="status" aria-live="polite" style="margin-top:8px"></div>
 </div>
 <div class="grid2">
 <div class="card"><h3>A. Locate Existing Local Data</h3>
@@ -140,6 +141,24 @@ button.danger{background:#b42318;color:white}
 </div>
 <div class="card"><div class="row"><div><label>Start optional</label><input id="rStart" type="date"></div><div><label>End optional</label><input id="rEnd" type="date"></div><div><label><input id="participationCoverageEnabled" type="checkbox" role="switch" checked style="width:auto" onchange="$('etfParticipationCoverage').disabled=!this.checked"> Enforce minimum participation coverage</label><label for="etfParticipationCoverage">ETF participation minimum coverage (%) · diagnostic only</label><input id="etfParticipationCoverage" type="number" min="1" max="100" step="1" value="80"></div><div><label><input id="rankWeightingEnabled" type="checkbox" role="switch" style="width:auto"> Top10 rank &amp; weighting research</label><p class="small">Off by default. ETF MOM10 / Top10 / 10D / 5 bps only. Compares equal weight, mild/linear gradients and their reverse tilts (more weight on lower Top10 ranks), separately from participation cash control.</p></div><button class="primary" onclick="runResearch()">RUN FULL RESEARCH</button></div></div>
 
+<div id="researchOut" style="display:none"><div class="card"><div id="runIdentity" style="font-weight:700"></div></div>
+<div class="card" id="participationChartPanel" hidden><h3>Participation control · Return benefit or penalty</h3><p id="participationChartSummary"></p><img id="participationComparisonChart" class="chart" alt="Original strategy versus participation-controlled cumulative net return over matching completed holding periods"><p class="small">Hypothetical comparison. Original charts remain unchanged. Select a different threshold and run research again to update this chart.</p></div>
+<div class="metrics"><div class="metric"><div class="small">Total Return</div><div id="m1" class="v"></div></div><div class="metric"><div class="small">Annualized Return</div><div id="m2" class="v"></div></div><div class="metric"><div class="small">Annualized Volatility</div><div id="m5" class="v"></div></div><div class="metric"><div class="small">CAGR / Ann. Vol (rf=0)</div><div id="m3" class="v"></div></div><div class="metric"><div class="small">Max Drawdown</div><div id="m4" class="v"></div></div></div>
+<div class="card" style="margin-top:14px"><div id="coverage" class="small"></div></div>
+<div class="card"><h3>Momentum Lookback × Forward Return</h3><div class="small">Rows are the checked MOM lookbacks. Columns are future trading-day returns. Each cell is the average forward return of the selected portfolio in this universe.</div><img id="lookbackHeat" class="chart"><div id="lookbackTable" style="margin-top:10px"></div></div>
+<div class="grid2"><div class="card"><h3>Primary MOM Rank / Signal Decay</h3><div class="small">Uses only the Primary / Backtest span and checks whether stronger ranks actually separate from weaker ranks.</div><img id="heat" class="chart"></div><div class="card"><h3>Equity Curve</h3><img id="eq" class="chart"></div></div>
+<div class="card"><h3>Drawdown</h3><img id="dd" class="chart"></div>
+<div class="card" id="sectorPanel" style="display:none"><h3>Sector Allocation</h3><img id="sectorChart" class="chart"><div id="sectorCaption" class="small"></div></div>
+<div class="card"><h3>Primary MOM Signal Decay Table</h3><div id="decay"></div></div>
+<div class="card"><h3>Latest Top 20 + Multi-Span Momentum Monitor</h3><div id="top20date" class="small"></div><div id="top20table"></div></div>
+<div class="card" id="etfMomentumPanel" style="display:none"><h3>ETF Momentum Conditions · Selected Strategy</h3><p id="etfMomentumInfo" class="small"></p><div id="etfVisualizationControls" hidden><label><input type="checkbox" id="etfMedianOverlay" onchange="updateETFVisualization()" style="width:auto"> Five-rebalance trailing median (restarts after gaps)</label><label><input type="checkbox" id="etfReturnColors" onchange="updateETFVisualization()" style="width:auto"> Color markers by subsequent realized net return (retrospective)</label><p class="small">Green: positive · Red: negative · Grey: zero or unavailable. Static charts have no hover; exact values are in the CSV.</p></div><img id="etfMomentumChart" class="chart" alt="Five aligned panels: unchanged daily net cumulative return, eligible MOM10 cross-section, positive MOM10 participation, selected Top10 MOM10, median eligible ETF 60-session return"><div id="etfMomentumEvidence"></div></div>
+<div class="card" id="rankWeightingResults" hidden></div>
+<div class="card"><h3>Past 10 Trading-Observation Price Trends</h3><div id="trendCharts" class="grid2"></div></div>
+<div class="card"><h3>Saved Results</h3><div id="saved" class="small"></div></div>
+</div>
+</section>
+
+<section id="strategygrid" class="page"><div class="card"><h3>Strategy Grid</h3><div class="row"><div><label for="gridUniverse">Universe</label><select id="gridUniverse" onchange="$('researchUniverse').value=this.value;changeUniverse()"><option value="CSI300">CSI 300</option><option value="CHINEXT_TOP100">ChiNext Top 100</option><option value="STAR_TOP100">STAR Top 100</option><option value="ETF_250M">Equity ETF ≥ RMB250M</option></select></div><div><label>Cost preset</label><select onchange="if(this.value!=='custom')$('gridCost').value=this.value"><option value="0">0 bps</option><option value="5" selected>5 bps = 0.05% = 0.5‰</option><option value="10">10 bps</option><option value="20">20 bps</option><option value="custom">Custom</option></select></div><div><label for="gridCost">Cost bps per one-way turnover</label><input id="gridCost" type="number" min="0" max="10000" step="any" value="5"></div></div><p class="small">Equity ETF ≥ RMB250M — Excludes bond, cash/money-market and commodity/gold ETFs. Eligibility is validated before each ETF run.</p></div>
 <div class="card" id="strategyGridCard">
 <h3>4. Strategy Grid / Robustness Test</h3>
 <div class="small">Automatically compares the same portfolio rule across calendar years, MOM lookbacks and rebalance periods. This is for robustness testing — not automatic parameter optimization.</div>
@@ -189,26 +208,7 @@ button.danger{background:#b42318;color:white}
   <div id="gridMatrix" class="matrixwrap"></div>
   <div class="small" style="margin-top:8px">Saved CSV: <span id="gridSaved"></span></div>
 </div>
-</div>
-
-<div id="researchOut" style="display:none"><div class="card"><div id="runIdentity" style="font-weight:700"></div></div>
-<div class="card" id="participationChartPanel" hidden><h3>Participation control · Return benefit or penalty</h3><p id="participationChartSummary"></p><img id="participationComparisonChart" class="chart" alt="Original strategy versus participation-controlled cumulative net return over matching completed holding periods"><p class="small">Hypothetical comparison. Original charts remain unchanged. Select a different threshold and run research again to update this chart.</p></div>
-<div class="metrics"><div class="metric"><div class="small">Total Return</div><div id="m1" class="v"></div></div><div class="metric"><div class="small">Annualized Return</div><div id="m2" class="v"></div></div><div class="metric"><div class="small">Annualized Volatility</div><div id="m5" class="v"></div></div><div class="metric"><div class="small">CAGR / Ann. Vol (rf=0)</div><div id="m3" class="v"></div></div><div class="metric"><div class="small">Max Drawdown</div><div id="m4" class="v"></div></div></div>
-<div class="card" style="margin-top:14px"><div id="coverage" class="small"></div></div>
-<div class="card"><h3>Momentum Lookback × Forward Return</h3><div class="small">Rows are the checked MOM lookbacks. Columns are future trading-day returns. Each cell is the average forward return of the selected portfolio in this universe.</div><img id="lookbackHeat" class="chart"><div id="lookbackTable" style="margin-top:10px"></div></div>
-<div class="grid2"><div class="card"><h3>Primary MOM Rank / Signal Decay</h3><div class="small">Uses only the Primary / Backtest span and checks whether stronger ranks actually separate from weaker ranks.</div><img id="heat" class="chart"></div><div class="card"><h3>Equity Curve</h3><img id="eq" class="chart"></div></div>
-<div class="card"><h3>Drawdown</h3><img id="dd" class="chart"></div>
-<div class="card" id="sectorPanel" style="display:none"><h3>Sector Allocation</h3><img id="sectorChart" class="chart"><div id="sectorCaption" class="small"></div></div>
-<div class="card"><h3>Primary MOM Signal Decay Table</h3><div id="decay"></div></div>
-<div class="card"><h3>Latest Top 20 + Multi-Span Momentum Monitor</h3><div id="top20date" class="small"></div><div id="top20table"></div></div>
-<div class="card" id="etfMomentumPanel" style="display:none"><h3>ETF Momentum Conditions · Selected Strategy</h3><p id="etfMomentumInfo" class="small"></p><div id="etfVisualizationControls" hidden><label><input type="checkbox" id="etfMedianOverlay" onchange="updateETFVisualization()" style="width:auto"> Five-rebalance trailing median (restarts after gaps)</label><label><input type="checkbox" id="etfReturnColors" onchange="updateETFVisualization()" style="width:auto"> Color markers by subsequent realized net return (retrospective)</label><p class="small">Green: positive · Red: negative · Grey: zero or unavailable. Static charts have no hover; exact values are in the CSV.</p></div><img id="etfMomentumChart" class="chart" alt="Five aligned panels: unchanged daily net cumulative return, eligible MOM10 cross-section, positive MOM10 participation, selected Top10 MOM10, median eligible ETF 60-session return"><div id="etfMomentumEvidence"></div></div>
-<div class="card" id="rankWeightingResults" hidden></div>
-<div class="card"><h3>Past 10 Trading-Observation Price Trends</h3><div id="trendCharts" class="grid2"></div></div>
-<div class="card"><h3>Saved Results</h3><div id="saved" class="small"></div></div>
-</div>
-</section>
-
-<section id="strategygrid" class="page"><div class="card"><h3>Strategy Grid</h3><div class="row"><div><label for="gridUniverse">Universe</label><select id="gridUniverse" onchange="$('researchUniverse').value=this.value;changeUniverse()"><option value="CSI300">CSI 300</option><option value="CHINEXT_TOP100">ChiNext Top 100</option><option value="STAR_TOP100">STAR Top 100</option><option value="ETF_250M">Equity ETF ≥ RMB250M</option></select></div><div><label>Cost preset</label><select onchange="if(this.value!=='custom')$('gridCost').value=this.value"><option value="0">0 bps</option><option value="5" selected>5 bps = 0.05% = 0.5‰</option><option value="10">10 bps</option><option value="20">20 bps</option><option value="custom">Custom</option></select></div><div><label for="gridCost">Cost bps per one-way turnover</label><input id="gridCost" type="number" min="0" max="10000" step="any" value="5"></div></div><p class="small">Equity ETF ≥ RMB250M — Excludes bond, cash/money-market and commodity/gold ETFs. Eligibility is validated before each ETF run.</p></div></section>
+</div></section>
 <section id="live" class="page"><div class="card"><h3>Live Portfolio</h3><div class="row"><div><label for="liveView">Portfolio view</label><select id="liveView" onchange="loadLivePortfolios()"><option value="active">Active / Paper / Paused</option><option value="closed">Closed</option><option value="archived">Archived</option><option value="all">All portfolios</option></select></div><div><label for="liveSelector">Portfolio</label><select id="liveSelector" onchange="loadLiveDetail()"><option value="">No portfolio selected</option></select></div><button class="secondary" onclick="loadLivePortfolios()">Reload portfolios</button><button class="primary" onclick="loadLiveDetail(true)">Refresh &amp; Save Snapshot</button></div><p id="liveMessage" class="small">Create a portfolio from a tested Strategy Grid row.</p></div><div id="liveContent"></div></section>
 <section id="audit" class="page"><div class="card"><h3>A. Portfolio Audit Trail</h3><p>Uses the portfolio selected in Live Portfolio. Trade corrections retain their original versions.</p><button class="primary" onclick="exportLive()">Export portfolio CSVs and audit</button><button class="secondary" onclick="loadLiveAudit()">Refresh audit</button><div id="liveExports"></div></div><div id="liveAudit"></div>
 <div class="card"><h3>B. Research / MOM Calculation Audit</h3><p>Inspect production inputs and retained calculation columns. Permanent portfolio events remain separate. Comparison strategy: Top10 / 10D.</p>
@@ -290,7 +290,24 @@ async function importCsv(id,input){
 }
 async function browseFolder(id){const j=await api('/api/browse-folder',{initial:$(id).value});if(j.path)$(id).value=j.path}
 async function testApi(){busy(true,'Testing Tushare...');try{await saveSettings();const j=await api('/api/test-tushare',{});$('apiMsg').innerHTML='<span class="ok">'+j.message+' Rows: '+j.rows+'</span>'}catch(e){$('apiMsg').innerHTML='<span class="bad">'+e.message+'</span>'}finally{busy(false)}}
-async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).filter(([k])=>names[k]).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('');loadBenchmarks()}
+async function loadStatus(){const j=await api('/api/status');const names={raw:'Raw prices',adjusted:'Adjusted prices',weights:'Membership / eligibility',factors:'Adj factors',calendar:'Trading calendar',limits:'Price limits'};$('statusGrid').innerHTML=Object.entries(j.status).filter(([k])=>names[k]).map(([k,x])=>`<div class="status"><div class="name">${names[k]}</div><div class="${x.exists?'ok':'warn'}">${x.exists?'✓ Available':'Not located'}</div><div class="small">${x.exists?(x.start+' → '+x.end+' · '+x.rows.toLocaleString()+' rows · '+x.extra):'Use Browse or Data Build.'}</div></div>`).join('');renderDataFreshness(j.status);loadBenchmarks()}
+function fmtWhen(iso){const d=new Date(iso);return isNaN(d)?null:d.toLocaleDateString()+' '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}
+function renderDataFreshness(s){
+ const el=$('dataFreshness');if(!el)return;
+ const m=(s&&s.manifest)||null;
+ const u=(m&&m.universe)||($('dataUniverse')?$('dataUniverse').value:'CSI300');
+ if(!s||!s.raw||!s.raw.exists){el.innerHTML='Data freshness — <b>'+escapeHtml(universeLabel(u))+'</b>: <span class="warn">no local price file found yet. Use Build / Rebuild (card B) or set file paths in card A.</span>';return}
+ const rawEnd=s.raw.end||(m&&m.raw_price_last_date);
+ const adjEnd=((s.adjusted&&s.adjusted.exists&&s.adjusted.end)||(m&&m.adjusted_price_last_date));
+ let html='Data freshness — <b>'+escapeHtml(universeLabel(u))+'</b>: raw prices '+escapeHtml(s.raw.start||'?')+' → <b>'+escapeHtml(rawEnd||'?')+'</b>';
+ if(adjEnd&&adjEnd!==rawEnd)html+=' · adjusted through '+escapeHtml(adjEnd);
+ const stocks=String(s.raw.extra||'').includes('stocks')?s.raw.extra:null;
+ if(stocks)html+=' · '+escapeHtml(stocks);
+ if(m&&m.updated_at){const when=fmtWhen(m.updated_at);const days=Math.floor((Date.now()-new Date(m.updated_at).getTime())/86400000);
+  if(when)html+=' · last build/update '+escapeHtml(when)+(days>=5?' <span class="warn">('+days+' days old)</span>':'')}
+ if(m&&m.validation_status)html+=' · validation '+escapeHtml(m.validation_status);
+ el.innerHTML=html;
+}
 async function validateFiles(){try{await checkIntegrity($('researchUniverse').value)}catch(e){$('validateMsg').textContent=e.message}}
 async function fullBuild(){
  $('dataRequestError').textContent='';
